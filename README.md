@@ -1,22 +1,13 @@
 # Rivalry Research
 
-A Python library for analyzing rivalrous relationships between people using Wikidata's knowledge graph.
-
-## Overview
-
-This library provides tools to:
-
-- Search for people on Wikidata with disambiguation support
-- Extract relationships between entities
-- Analyze rivalries using AI-powered analysis
-- Return structured facts about conflicts and drama
+Analyze rivalrous relationships between people using Wikidata's knowledge graph and AI.
 
 ## Features
 
-- **Entity Search**: Find Wikidata entities by name with disambiguation
-- **Relationship Extraction**: Query relationships between two people using SPARQL
-- **AI Analysis**: Use Pydantic-AI to identify and structure rivalry-related facts
-- **Structured Output**: Get rivalry data as typed Pydantic models
+- Search for people on Wikidata with disambiguation
+- Extract relationships between entities using SPARQL
+- AI-powered rivalry analysis with structured output
+- Support for multiple AI providers (Gemini, OpenAI, Anthropic)
 
 ## Installation
 
@@ -27,22 +18,71 @@ uv add rivalry-research
 ## Requirements
 
 - Python 3.13+
-- API key for AI provider (OpenAI, Anthropic, etc.)
+- AI provider API key
 
-## Usage
+## Quick Start
 
-Coming soon...
+```python
+import os
+from rivalry_research import search_person, analyze_rivalry
+
+# Set API key
+os.environ["GOOGLE_API_KEY"] = "your-api-key"
+
+# Search for people
+newton = search_person("Isaac Newton")[0]
+leibniz = search_person("Gottfried Wilhelm Leibniz")[0]
+
+# Analyze rivalry
+analysis = analyze_rivalry(newton.id, leibniz.id)
+
+print(f"Rivalry exists: {analysis.rivalry_exists}")
+print(f"Score: {analysis.rivalry_score:.2f}")
+print(f"\n{analysis.summary}")
+
+for fact in analysis.facts:
+    print(f"- {fact.fact}")
+```
+
+## Configuration
+
+Configure the AI model via environment variable (defaults to Gemini):
+
+```bash
+export RIVALRY_MODEL="google-gla:gemini-2.5-flash"
+```
+
+Set the appropriate API key:
+
+```bash
+# For Google Gemini (default)
+export GOOGLE_API_KEY="your-key"
+
+# For OpenAI
+export OPENAI_API_KEY="your-key"
+
+# For Anthropic
+export ANTHROPIC_API_KEY="your-key"
+```
+
+## Examples
+
+```python
+# Newton vs Leibniz - calculus priority dispute
+analysis = analyze_rivalry("Q935", "Q9047")
+```
+
+### Sports Rivalry
+
+```python
+# Messi vs Ronaldo
+analysis = analyze_rivalry("Q615", "Q11571")
+```
 
 ## Development
 
-This project uses `uv` for package management.
-
 ```bash
-# Install dependencies
 uv sync
-
-# Run tests
-uv run pytest
 ```
 
 ## License
