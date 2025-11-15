@@ -1,0 +1,18 @@
+[project]
+name = "rivalry-research"
+version = "0.1.0"
+description = "A Python library for analyzing rivalrous relationships using Wikidata's knowledge graph"
+readme = "README.md"
+authors = [
+    { name = "David Rojas", email = "lempira@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.12.4",
+    "pydantic-ai>=1.18.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
