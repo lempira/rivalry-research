@@ -36,7 +36,7 @@ def analyze_rivalry(entity_id1: str, entity_id2: str) -> RivalryAnalysis:
 
     This is a high-level convenience function that orchestrates the entire workflow:
     1. Fetches both entities from Wikidata
-    2. Extracts direct relationships between them
+    2. Extracts direct relationships and shared properties between them
     3. Uses AI to analyze and structure rivalry information
 
     Args:
@@ -63,8 +63,9 @@ def analyze_rivalry(entity_id1: str, entity_id2: str) -> RivalryAnalysis:
     entity1 = get_person_by_id(entity_id1)
     entity2 = get_person_by_id(entity_id2)
 
-    # Get direct relationships
+    # Get direct relationships and shared properties
     relationships = get_direct_relationships(entity_id1, entity_id2)
+    shared_props = get_shared_properties(entity_id1, entity_id2)
 
     # Analyze with AI
-    return analyze_rivalry_with_data(entity1, entity2, relationships)
+    return analyze_rivalry_with_data(entity1, entity2, relationships, shared_props)

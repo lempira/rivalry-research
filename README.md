@@ -46,23 +46,16 @@ for fact in analysis.facts:
 
 ## Configuration
 
-Configure the AI model via environment variable (defaults to Gemini):
-
 ```bash
-export RIVALRY_MODEL="google-gla:gemini-2.5-flash"
+cp env.example .env
+# Edit .env and add your GOOGLE_API_KEY
 ```
 
-Set the appropriate API key:
+Or export environment variables directly:
 
 ```bash
-# For Google Gemini (default)
 export GOOGLE_API_KEY="your-key"
-
-# For OpenAI
-export OPENAI_API_KEY="your-key"
-
-# For Anthropic
-export ANTHROPIC_API_KEY="your-key"
+export RIVALRY_MODEL="google-gla:gemini-2.5-flash"  # optional, this is the default
 ```
 
 ## Examples
@@ -70,13 +63,6 @@ export ANTHROPIC_API_KEY="your-key"
 ```python
 # Newton vs Leibniz - calculus priority dispute
 analysis = analyze_rivalry("Q935", "Q9047")
-```
-
-### Sports Rivalry
-
-```python
-# Messi vs Ronaldo
-analysis = analyze_rivalry("Q615", "Q11571")
 ```
 
 ## Development

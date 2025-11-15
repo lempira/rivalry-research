@@ -1,6 +1,9 @@
 """Example: Analyze the Newton-Leibniz calculus priority dispute."""
 
+import json
 import os
+from pathlib import Path
+
 from rivalry_research import search_person, analyze_rivalry
 
 
@@ -36,7 +39,7 @@ def main():
     print(f"  {leibniz.description}\n")
     
     # Analyze rivalry
-    print(f"Analyzing rivalry...\n")
+    print("Analyzing rivalry...\n")
     
     try:
         analysis = analyze_rivalry(newton.id, leibniz.id)
@@ -64,6 +67,17 @@ def main():
                 print(f"  • {rel.property_label}: {target}")
         
         print("\n" + "=" * 70)
+        
+        # Save output to JSON file
+        output_dir = Path(__file__).parent / "output"
+        output_dir.mkdir(exist_ok=True)
+        
+        output_file = output_dir / f"{newton.id}_{leibniz.id}_rivalry_analysis.json"
+        
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(analysis.model_dump(), f, indent=2, ensure_ascii=False, default=str)
+        
+        print(f"\n💾 Analysis saved to: {output_file}")
         
     except Exception as e:
         print(f"❌ Error: {e}")

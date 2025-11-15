@@ -42,8 +42,8 @@ class Relationship(BaseModel):
     target_entity_label: str | None = Field(
         None, description="Target entity label if available"
     )
-    context: dict[str, Any] = Field(
-        default_factory=dict, description="Additional context (dates, locations, etc.)"
+    qualifiers: list[str] = Field(
+        default_factory=list, description="Additional context as list of strings"
     )
     references: list[str] = Field(
         default_factory=list, description="Source URLs or reference data"

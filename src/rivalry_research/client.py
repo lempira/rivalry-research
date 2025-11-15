@@ -182,7 +182,7 @@ def get_entity(entity_id: str, timeout: float = 10.0) -> WikidataEntity:
 
         # Get all claims
         claims = entity_data.get("claims", {})
-
+        
         return WikidataEntity(
             id=entity_id,
             label=label,
