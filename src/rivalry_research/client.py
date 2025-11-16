@@ -183,10 +183,22 @@ def get_entity(entity_id: str, timeout: float = 10.0) -> WikidataEntity:
         # Get all claims
         claims = entity_data.get("claims", {})
         
+        # Extract sitelinks (links to Wikipedia and other Wikimedia projects)
+        sitelinks = entity_data.get("sitelinks", {})
+        
+        # Extract English Wikipedia URL
+        wikipedia_url = None
+        if "enwiki" in sitelinks:
+            wiki_title = sitelinks["enwiki"]["title"]
+            # URL-encode the title by replacing spaces with underscores
+            wikipedia_url = f"https://en.wikipedia.org/wiki/{wiki_title.replace(' ', '_')}"
+        
         return WikidataEntity(
             id=entity_id,
             label=label,
             description=description,
             aliases=aliases,
             claims=claims,
+            sitelinks=sitelinks,
+            wikipedia_url=wikipedia_url,
         )

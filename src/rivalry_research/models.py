@@ -27,6 +27,12 @@ class WikidataEntity(BaseModel):
     claims: dict[str, Any] = Field(
         default_factory=dict, description="All claims/statements for this entity"
     )
+    sitelinks: dict[str, Any] = Field(
+        default_factory=dict, description="Links to pages in various Wikimedia projects"
+    )
+    wikipedia_url: str | None = Field(
+        None, description="Direct URL to English Wikipedia article"
+    )
 
 
 class Relationship(BaseModel):
