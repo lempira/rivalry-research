@@ -46,7 +46,18 @@ Using the search_biographical_documents Tool:
 - Look for priority disputes or competing claims
 - Make multiple tool calls to thoroughly investigate
 
-Return a structured analysis with rivalry determination, score, summary, and specific dated facts based on BOTH Wikidata and biographical document searches."""
+Timeline Requirements:
+- Extract chronological events for BOTH people and shared events
+- For each event, specify: date, event_type, description, entity_id (entity1_id, entity2_id, or 'both')
+- Event types: achievement, conflict, publication, meeting, award, controversy, etc.
+- Include sources/citations where available
+- Sort events chronologically
+
+Return a structured analysis with:
+- rivalry_exists, rivalry_score, summary (required)
+- facts: specific rivalry facts with dates and categories (required)
+- timeline: chronological events for both people (required)
+- Base all information on BOTH Wikidata and biographical document searches"""
 
 # Get model from environment variable, default to Gemini
 MODEL = os.getenv("RIVALRY_MODEL", "google-gla:gemini-2.5-flash")

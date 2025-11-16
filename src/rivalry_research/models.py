@@ -95,6 +95,10 @@ class RivalryAnalysis(BaseModel):
     facts: list[RivalryFact] = Field(
         default_factory=list, description="Structured facts about the rivalry"
     )
+    timeline: list["TimelineEvent"] = Field(
+        default_factory=list,
+        description="Chronological timeline of rivalry events and milestones",
+    )
     relationships: list[Relationship] = Field(
         default_factory=list,
         description="Direct Wikidata relationships between entities",

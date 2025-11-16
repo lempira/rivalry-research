@@ -9,6 +9,7 @@ from .models import (
     Relationship,
     RivalryAnalysis,
     RivalryFact,
+    TimelineEvent,
     WikidataEntity,
 )
 from .rag.file_search_client import (
@@ -43,6 +44,7 @@ __all__ = [
     "Relationship",
     "RivalryFact",
     "RivalryAnalysis",
+    "TimelineEvent",
     # Advanced functions
     "get_direct_relationships",
     "get_shared_properties",
