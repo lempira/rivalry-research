@@ -1,14 +1,14 @@
 """Pydantic-AI agent for analyzing rivalrous relationships."""
 
-import json
 import logging
 import os
 from typing import Any
 
-from google.genai import types
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 
+from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship
+from .rag.file_search_client import query_store
 
 logger = logging.getLogger(__name__)
 
@@ -59,107 +59,15 @@ def extract_claim_values(claims: dict[str, Any], property_id: str, limit: int = 
     return values
 
 
-def format_entity_details(entity: WikidataEntity) -> str:
-    """
-    Format key details from a WikidataEntity for AI context.
-    
-    Args:
-        entity: WikidataEntity with claims data
-    
-    Returns:
-        Formatted string with key biographical/professional details
-    """
-    details = []
-    
-    # Birth/death dates
-    birth_dates = extract_claim_values(entity.claims, 'P569', limit=1)
-    if birth_dates:
-        details.append(f"Born: {birth_dates[0]}")
-    
-    death_dates = extract_claim_values(entity.claims, 'P570', limit=1)
-    if death_dates:
-        details.append(f"Died: {death_dates[0]}")
-    
-    # Occupations
-    occupations = extract_claim_values(entity.claims, 'P106', limit=3)
-    if occupations:
-        details.append(f"Occupation(s): {', '.join(occupations)}")
-    
-    # Field of work
-    fields = extract_claim_values(entity.claims, 'P101', limit=3)
-    if fields:
-        details.append(f"Field(s): {', '.join(fields)}")
-    
-    # Notable works or discoveries
-    notable_works = extract_claim_values(entity.claims, 'P800', limit=3)
-    if notable_works:
-        details.append(f"Notable work(s): {', '.join(notable_works)}")
-    
-    discoveries = extract_claim_values(entity.claims, 'P61', limit=3)
-    if discoveries:
-        details.append(f"Discovered/Invented: {', '.join(discoveries)}")
-    
-    return '\n- '.join([''] + details) if details else ''
-
-
-def log_tool_usage(result: Any) -> None:
-    """
-    Log whether the agent used any tools during execution.
-    Only logs at DEBUG level.
-    
-    Args:
-        result: The result object from rivalry_agent.run_sync()
-    """
-    try:
-        # Decode binary JSON and parse it
-        messages_data = result.all_messages_json()
-        messages = json.loads(messages_data.decode('utf-8'))
-        
-        tool_used = False
-        tool_call_count = 0
-        tool_queries = []
-        
-        for msg in messages:
-            # Check for tool calls in the message
-            if 'tool_calls' in msg and msg['tool_calls']:
-                tool_used = True
-                for tool_call in msg['tool_calls']:
-                    tool_call_count += 1
-                    # Try to extract query information if available
-                    if isinstance(tool_call, dict):
-                        # Look for function/query parameters
-                        if 'function' in tool_call:
-                            func_data = tool_call['function']
-                            if isinstance(func_data, dict) and 'arguments' in func_data:
-                                tool_queries.append(func_data.get('arguments', ''))
-                        # Direct query field
-                        elif 'query' in tool_call:
-                            tool_queries.append(tool_call['query'])
-                logger.debug(f"Tool call found: {tool_call}")
-            
-            # Check if message role is 'tool' (tool response)
-            elif msg.get('role') == 'tool':
-                tool_used = True
-                logger.debug(f"Tool response found: {msg.get('content', '')[:200]}...")
-        
-        if tool_used:
-            logger.debug(f"✓ File search tool USED ({tool_call_count} call(s))")
-            for i, query in enumerate(tool_queries, 1):
-                if query:
-                    logger.debug(f"  Tool call {i}: {query}")
-        else:
-            logger.debug("✗ File search tool NOT USED")
-    except Exception as e:
-        logger.debug(f"Could not determine tool usage: {e}")
-
-
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
 
+IMPORTANT: You have access to a 'search_biographical_documents' tool. You MUST use this tool to query biographical information about both people before completing your analysis.
+
 Your task is to:
-1. Analyze the provided entity data, direct relationships, and shared properties from Wikidata
-2. Query biographical documents (when available) for timeline events, interactions, and narrative context
-3. Determine if a rivalrous relationship exists (competition, conflict, controversy)
+1. Use the 'search_biographical_documents' tool to query information about both people (make multiple queries as needed)
+2. Analyze the provided entity data, direct relationships, and shared properties from Wikidata
+3. Combine insights from biographical documents and Wikidata to determine if a rivalrous relationship exists
 4. Extract specific factual incidents or events with dates that demonstrate the rivalry
 5. Be conservative - only mark rivalry_exists=True if there's clear evidence
 
@@ -178,14 +86,14 @@ Using Wikidata Structured Data:
 - Temporal overlap (same time period) establishes they were contemporaries
 - Shared institutions/awards/fields provide context for potential conflict
 
-Using Biographical Documents (File Search):
-- Query for timeline events, key dates, achievements, publications
-- Look for mentions of conflicts, competitions, disputes, controversies
-- Extract context about interactions or lack thereof
-- Find evidence of priority disputes or competing claims
-- Use document sources to support facts with citations
+Using the search_biographical_documents Tool:
+- Call this tool with queries about: timeline events, conflicts, disputes, controversies, achievements, publications
+- Query for specific information like: "conflicts between [person1] and [person2]"
+- Query for timeline information: "key dates in [person]'s career"
+- Look for priority disputes or competing claims
+- Make multiple tool calls to thoroughly investigate
 
-Return a structured analysis with rivalry determination, score, summary, and specific dated facts."""
+Return a structured analysis with rivalry determination, score, summary, and specific dated facts based on BOTH Wikidata and biographical document searches."""
 
 # Get model from environment variable, default to Gemini
 MODEL = os.getenv("RIVALRY_MODEL", "google-gla:gemini-2.5-flash")
@@ -196,7 +104,43 @@ rivalry_agent = Agent(
     MODEL,
     output_type=RivalryAnalysis,
     system_prompt=SYSTEM_PROMPT,
+    deps_type=str,  # Store name passed as dependency
 )
+
+
+@rivalry_agent.tool
+def search_biographical_documents(ctx: RunContext[str], query: str) -> str:
+    """
+    Search biographical documents for information about the people being analyzed.
+    
+    Use this tool to query biographical documents stored in the File Search store.
+    You can make multiple queries to gather comprehensive information.
+    
+    Args:
+        ctx: RunContext containing store_name as dependency
+        query: Natural language search query about the people
+    
+    Returns:
+        Search results from biographical documents
+    """
+    store_name = ctx.deps
+    logger.debug(f"Tool 'search_biographical_documents' called with query: {query}")
+    
+    try:
+        response = query_store(store_name, query)
+        result_text = response.text
+        
+        # Add grounding metadata if available
+        if hasattr(response, 'candidates') and response.candidates:
+            grounding = response.candidates[0].grounding_metadata
+            if grounding:
+                logger.debug(f"Results include grounding from {len(grounding.grounding_chunks or [])} chunks")
+        
+        logger.debug(f"Tool returned {len(result_text)} characters")
+        return result_text
+    except Exception as e:
+        logger.error(f"Tool search failed: {e}")
+        return f"Error searching documents: {str(e)}"
 
 
 def analyze_rivalry(
@@ -308,23 +252,15 @@ Combine insights from both Wikidata and biographical documents for a comprehensi
     
     context += "Based on this data, analyze if a rivalry exists between these two people."
 
-    # Run agent with File Search tool
+    # Run agent with search tool
     logger.info(f"Using File Search store: {store_name}")
-    logger.debug("Agent will query biographical documents via File Search")
+    logger.debug("Agent has access to search_biographical_documents tool")
     logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
-    logger.info("Running AI agent with File Search...")
+    logger.info("Running AI agent with biographical search tool...")
     
     result = rivalry_agent.run_sync(
         context,
-        model_settings={
-            "tools": [
-                types.Tool(
-                    file_search=types.FileSearch(
-                        file_search_store_names=[store_name]
-                    )
-                )
-            ]
-        },
+        deps=store_name,  # Pass store name as dependency for tool
     )
     
     # Log tool usage at DEBUG level
