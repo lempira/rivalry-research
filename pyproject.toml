@@ -15,6 +15,9 @@ dependencies = [
     "google-genai>=1.50.0",
 ]
 
+[project.scripts]
+rivalry-fs = "rivalry_research.cli.file_search_status:main"
+
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
 build-backend = "uv_build"

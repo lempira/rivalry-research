@@ -44,6 +44,21 @@ for fact in analysis.facts:
     print(f"- {fact.fact}")
 ```
 
+## CLI Commands
+
+Monitor your File Search stores:
+
+```bash
+# List all stores
+uv run rivalry-fs list-stores
+
+# List documents in stores
+uv run rivalry-fs list-docs
+
+# Check store health
+uv run rivalry-fs health-check
+```
+
 ## Configuration
 
 ```bash

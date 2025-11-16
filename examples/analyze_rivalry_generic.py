@@ -4,23 +4,38 @@ import argparse
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 
 from rivalry_research import search_person, analyze_rivalry
 
+LOG_LEVEL = "DEBUG"
 
-def setup_logging(level: str = "INFO"):
+def setup_logging(level: str):
     """
-    Configure logging for the application.
+    Configure logging to show only rivalry_research logs.
+    
+    The root logger is set to WARNING to silence third-party libraries
+    (httpx, httpcore, etc.), while rivalry_research is set to the requested level.
     
     Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR)
+        level: Logging level for rivalry_research (DEBUG, INFO, WARNING, ERROR)
+    
+    Note:
+        To see ALL loggers including third-party libraries, change:
+            level=logging.WARNING  # Current (shows only rivalry_research)
+        to:
+            level=getattr(logging, level.upper())  # Shows all loggers
     """
+    # Set root logger to WARNING to silence third-party libraries
     logging.basicConfig(
-        level=getattr(logging, level.upper()),
+        level=logging.WARNING,  # Only show warnings/errors from third-party libs
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
+    )
+    
+    # Set rivalry_research to the requested level (includes all submodules)
+    logging.getLogger('rivalry_research').setLevel(
+        getattr(logging, level.upper())
     )
 
 
@@ -41,7 +56,7 @@ def main():
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
+        default=LOG_LEVEL,
         help="Set logging level (default: INFO)"
     )
     

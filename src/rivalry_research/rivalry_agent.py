@@ -1,5 +1,6 @@
 """Pydantic-AI agent for analyzing rivalrous relationships."""
 
+import json
 import logging
 import os
 from typing import Any
@@ -100,6 +101,58 @@ def format_entity_details(entity: WikidataEntity) -> str:
     
     return '\n- '.join([''] + details) if details else ''
 
+
+def log_tool_usage(result: Any) -> None:
+    """
+    Log whether the agent used any tools during execution.
+    Only logs at DEBUG level.
+    
+    Args:
+        result: The result object from rivalry_agent.run_sync()
+    """
+    try:
+        # Decode binary JSON and parse it
+        messages_data = result.all_messages_json()
+        messages = json.loads(messages_data.decode('utf-8'))
+        
+        tool_used = False
+        tool_call_count = 0
+        tool_queries = []
+        
+        for msg in messages:
+            # Check for tool calls in the message
+            if 'tool_calls' in msg and msg['tool_calls']:
+                tool_used = True
+                for tool_call in msg['tool_calls']:
+                    tool_call_count += 1
+                    # Try to extract query information if available
+                    if isinstance(tool_call, dict):
+                        # Look for function/query parameters
+                        if 'function' in tool_call:
+                            func_data = tool_call['function']
+                            if isinstance(func_data, dict) and 'arguments' in func_data:
+                                tool_queries.append(func_data.get('arguments', ''))
+                        # Direct query field
+                        elif 'query' in tool_call:
+                            tool_queries.append(tool_call['query'])
+                logger.debug(f"Tool call found: {tool_call}")
+            
+            # Check if message role is 'tool' (tool response)
+            elif msg.get('role') == 'tool':
+                tool_used = True
+                logger.debug(f"Tool response found: {msg.get('content', '')[:200]}...")
+        
+        if tool_used:
+            logger.debug(f"✓ File search tool USED ({tool_call_count} call(s))")
+            for i, query in enumerate(tool_queries, 1):
+                if query:
+                    logger.debug(f"  Tool call {i}: {query}")
+        else:
+            logger.debug("✗ File search tool NOT USED")
+    except Exception as e:
+        logger.debug(f"Could not determine tool usage: {e}")
+
+
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
 
@@ -151,7 +204,7 @@ def analyze_rivalry(
     entity2: WikidataEntity,
     relationships: list[Relationship],
     shared_properties: dict[str, Any],
-    store_name: str | None = None,
+    store_name: str,
 ) -> RivalryAnalysis:
     """
     Analyze the rivalry between two entities using AI.
@@ -160,8 +213,8 @@ def analyze_rivalry(
     and uses an AI agent to determine if a rivalry exists, rate its intensity, and
     extract specific facts about the rivalry.
     
-    When store_name is provided, the agent can query biographical documents via File Search
-    to enrich the analysis with timeline events and narrative context.
+    The agent queries biographical documents via File Search to enrich the analysis
+    with timeline events and narrative context.
 
     The AI model used can be configured via the RIVALRY_MODEL environment variable.
     Defaults to "google-gla:gemini-2.5-flash" if not set.
@@ -171,7 +224,7 @@ def analyze_rivalry(
         entity2: Second entity (person) data from Wikidata
         relationships: List of direct relationships between the entities
         shared_properties: Dictionary of properties both entities share
-        store_name: Optional File Search store name for biographical document access
+        store_name: File Search store name for biographical document access
 
     Returns:
         RivalryAnalysis with structured rivalry data
@@ -180,17 +233,13 @@ def analyze_rivalry(
         Exception: If the AI model fails or returns invalid data
 
     Example:
-        >>> # Wikidata only
         >>> entity1 = get_entity("Q41421")
         >>> entity2 = get_entity("Q134183")
         >>> rels = get_direct_relationships("Q41421", "Q134183")
         >>> shared = get_shared_properties("Q41421", "Q134183")
-        >>> analysis = analyze_rivalry(entity1, entity2, rels, shared)
+        >>> analysis = analyze_rivalry(entity1, entity2, rels, shared, store_name="fileSearchStores/abc")
         >>> print(analysis.rivalry_exists)
         True
-        
-        >>> # With File Search for enriched analysis
-        >>> analysis = analyze_rivalry(entity1, entity2, rels, shared, store_name="fileSearchStores/abc")
     """
     logger.info(f"Analyzing rivalry: {entity1.label} vs {entity2.label}")
     logger.debug(f"Entity 1 details: {format_entity_details(entity1)}")
@@ -243,9 +292,8 @@ Direct Relationships Found:
     else:
         context += "\nNo shared properties found."
 
-    # Add instruction about biographical documents if File Search is available
-    if store_name:
-        context += """
+    # Add instruction about biographical documents
+    context += """
 
 Biographical Documents Available:
 You have access to biographical documents for both people via File Search.
@@ -257,38 +305,30 @@ Query these documents to find:
 
 Combine insights from both Wikidata and biographical documents for a comprehensive analysis.
 """
-    else:
-        context += "\n\n"
     
     context += "Based on this data, analyze if a rivalry exists between these two people."
 
-    # Configure agent with File Search if store provided
-    if store_name:
-        logger.info(f"Using File Search store: {store_name}")
-        logger.debug("Agent will query biographical documents via File Search")
-        logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
-        
-        # Run agent with File Search tool
-        logger.info("Running AI agent with File Search...")
-        result = rivalry_agent.run_sync(
-            context,
-            model_settings={
-                "tools": [
-                    types.Tool(
-                        file_search=types.FileSearch(
-                            file_search_store_names=[store_name]
-                        )
+    # Run agent with File Search tool
+    logger.info(f"Using File Search store: {store_name}")
+    logger.debug("Agent will query biographical documents via File Search")
+    logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
+    logger.info("Running AI agent with File Search...")
+    
+    result = rivalry_agent.run_sync(
+        context,
+        model_settings={
+            "tools": [
+                types.Tool(
+                    file_search=types.FileSearch(
+                        file_search_store_names=[store_name]
                     )
-                ]
-            },
-        )
-    else:
-        logger.info("Using Wikidata data only (no File Search)")
-        logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
-        
-        # Run agent with Wikidata data only
-        logger.info("Running AI agent...")
-        result = rivalry_agent.run_sync(context)
+                )
+            ]
+        },
+    )
+    
+    # Log tool usage at DEBUG level
+    log_tool_usage(result)
     
     logger.info(
         f"Agent analysis complete: rivalry={result.output.rivalry_exists}, "
