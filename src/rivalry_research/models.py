@@ -56,6 +56,20 @@ class Relationship(BaseModel):
     )
 
 
+class RivalryEntity(BaseModel):
+    """Entity involved in a rivalry with biographical context."""
+
+    id: str = Field(..., description="Wikidata entity ID (e.g., 'Q42')")
+    label: str = Field(..., description="Primary label/name of the entity")
+    description: str | None = Field(None, description="Brief description of the entity")
+    birth_date: str | None = Field(None, description="Birth date (YYYY or YYYY-MM-DD format)")
+    death_date: str | None = Field(None, description="Death date (YYYY or YYYY-MM-DD format)")
+    occupation: list[str] = Field(
+        default_factory=list, description="Occupations or professions"
+    )
+    nationality: str | None = Field(None, description="Nationality or country")
+
+
 class RivalryFact(BaseModel):
     """Individual fact about a rivalry or conflict."""
 
@@ -78,10 +92,8 @@ class RivalryFact(BaseModel):
 class RivalryAnalysis(BaseModel):
     """Complete analysis of rivalry between two entities."""
 
-    entity1_id: str = Field(..., description="First entity ID")
-    entity1_label: str = Field(..., description="First entity name")
-    entity2_id: str = Field(..., description="Second entity ID")
-    entity2_label: str = Field(..., description="Second entity name")
+    entity1: RivalryEntity = Field(..., description="First entity with biographical data")
+    entity2: RivalryEntity = Field(..., description="Second entity with biographical data")
     rivalry_exists: bool = Field(
         ..., description="Whether a rivalry relationship was detected"
     )
@@ -91,13 +103,16 @@ class RivalryAnalysis(BaseModel):
         le=1.0,
         description="Strength of rivalry (0=none, 1=intense)",
     )
-    summary: str = Field(..., description="Natural language summary of the rivalry")
-    facts: list[RivalryFact] = Field(
-        default_factory=list, description="Structured facts about the rivalry"
+    rivalry_period_start: str | None = Field(
+        None, description="When the rivalry began (YYYY format)"
     )
+    rivalry_period_end: str | None = Field(
+        None, description="When the rivalry ended or was resolved (YYYY format)"
+    )
+    summary: str = Field(..., description="Natural language summary of the rivalry")
     timeline: list["TimelineEvent"] = Field(
         default_factory=list,
-        description="Chronological timeline of rivalry events and milestones",
+        description="Chronological timeline of rivalry-relevant events only (not full biographies)",
     )
     relationships: list[Relationship] = Field(
         default_factory=list,
@@ -129,7 +144,7 @@ class Citation(BaseModel):
 
 
 class TimelineEvent(BaseModel):
-    """Individual event in a timeline."""
+    """Individual event in a rivalry timeline."""
 
     date: str = Field(
         ..., description="Date or time period (e.g., '1665', '1684-11-05', 'late 1600s')"
@@ -142,6 +157,10 @@ class TimelineEvent(BaseModel):
     entity_id: str = Field(
         ...,
         description="Entity this event relates to (entity ID or 'both' for shared events)",
+    )
+    rivalry_relevance: str = Field(
+        default="direct",
+        description="Relevance to rivalry: 'direct' (head-to-head conflict), 'parallel' (competing work), 'context' (establishing overlap), 'resolution' (ending/recognition)",
     )
     sources: list[str] = Field(
         default_factory=list, description="Citation sources for this event"

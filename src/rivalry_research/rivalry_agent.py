@@ -7,10 +7,122 @@ from typing import Any
 from pydantic_ai import Agent, RunContext, InstrumentationSettings
 
 from .logging_utils import format_entity_details, log_tool_usage
-from .models import RivalryAnalysis, WikidataEntity, Relationship
+from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity
 from .rag.file_search_client import query_store
 
 logger = logging.getLogger(__name__)
+
+
+def extract_date_from_claims(claims: dict[str, Any], property_id: str) -> str | None:
+    """
+    Extract date value from Wikidata claims for a given property.
+    
+    Args:
+        claims: Wikidata claims dictionary
+        property_id: Property ID (e.g., 'P569' for birth date)
+    
+    Returns:
+        Date string in YYYY or YYYY-MM-DD format, or None if not found
+    """
+    if property_id not in claims:
+        return None
+    
+    claim_list = claims[property_id]
+    if not claim_list:
+        return None
+    
+    # Get first claim's value
+    try:
+        mainsnak = claim_list[0].get('mainsnak', {})
+        datavalue = mainsnak.get('datavalue', {})
+        value = datavalue.get('value', {})
+        
+        if isinstance(value, dict) and 'time' in value:
+            # Wikidata time format: +1834-02-08T00:00:00Z
+            time_str = value['time']
+            # Remove leading + and timezone info
+            time_str = time_str.lstrip('+').split('T')[0]
+            return time_str
+    except (KeyError, IndexError, AttributeError):
+        pass
+    
+    return None
+
+
+def extract_list_from_claims(claims: dict[str, Any], property_id: str) -> list[str]:
+    """
+    Extract list of string values from Wikidata claims for a given property.
+    
+    Args:
+        claims: Wikidata claims dictionary
+        property_id: Property ID (e.g., 'P106' for occupation)
+    
+    Returns:
+        List of label strings
+    """
+    if property_id not in claims:
+        return []
+    
+    claim_list = claims[property_id]
+    results = []
+    
+    for claim in claim_list:
+        try:
+            mainsnak = claim.get('mainsnak', {})
+            datavalue = mainsnak.get('datavalue', {})
+            value = datavalue.get('value', {})
+            
+            # For entity references, try to get the label
+            if isinstance(value, dict) and 'id' in value:
+                # We'd need to look up the label, but for now just use the ID
+                # In a real implementation, you might cache these or make additional queries
+                entity_id = value['id']
+                results.append(entity_id)
+        except (KeyError, AttributeError):
+            continue
+    
+    return results
+
+
+def create_rivalry_entity(wikidata_entity: WikidataEntity) -> RivalryEntity:
+    """
+    Create a RivalryEntity from a WikidataEntity by extracting relevant biographical data.
+    
+    Args:
+        wikidata_entity: Full Wikidata entity with all claims
+    
+    Returns:
+        RivalryEntity with biographical context
+    """
+    claims = wikidata_entity.claims
+    
+    # Extract biographical data
+    birth_date = extract_date_from_claims(claims, 'P569')  # date of birth
+    death_date = extract_date_from_claims(claims, 'P570')  # date of death
+    occupations = extract_list_from_claims(claims, 'P106')  # occupation
+    
+    # Extract nationality (P27 - country of citizenship)
+    nationality = None
+    if 'P27' in claims and claims['P27']:
+        try:
+            country_claim = claims['P27'][0]
+            mainsnak = country_claim.get('mainsnak', {})
+            datavalue = mainsnak.get('datavalue', {})
+            value = datavalue.get('value', {})
+            if isinstance(value, dict) and 'id' in value:
+                nationality = value['id']
+        except (KeyError, IndexError, AttributeError):
+            pass
+    
+    return RivalryEntity(
+        id=wikidata_entity.id,
+        label=wikidata_entity.label,
+        description=wikidata_entity.description,
+        birth_date=birth_date,
+        death_date=death_date,
+        occupation=occupations,
+        nationality=nationality,
+    )
 
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
@@ -46,17 +158,30 @@ Using the search_biographical_documents Tool:
 - Look for priority disputes or competing claims
 - Make multiple tool calls to thoroughly investigate
 
-Timeline Requirements:
-- Extract chronological events for BOTH people and shared events
-- For each event, specify: date, event_type, description, entity_id (entity1_id, entity2_id, or 'both')
-- Event types: achievement, conflict, publication, meeting, award, controversy, etc.
+Entity Data Requirements:
+- Populate entity1 and entity2 objects with biographical data (birth_date, death_date already provided)
+- Use the entity IDs provided in the context for entity_id fields
+
+Timeline Requirements (RIVALRY-FOCUSED ONLY):
+- Extract ONLY rivalry-relevant events (DO NOT include full biographical timelines)
+- Include events with rivalry_relevance:
+  * 'direct': Head-to-head conflicts, disputes, public disagreements
+  * 'parallel': Competing publications, simultaneous discoveries, overlapping achievements
+  * 'context': Entry into same field or establishing competitive overlap (minimal, only if essential)
+  * 'resolution': Joint awards, acknowledgments, reconciliation
+- EXCLUDE: births, deaths, general education, unrelated achievements, routine career milestones
+- For each event: date, event_type, description, entity_id (use entity1.id, entity2.id, or 'both'), rivalry_relevance
 - Include sources/citations where available
 - Sort events chronologically
 
+Rivalry Period:
+- Specify rivalry_period_start: when the rivalry/competition began (YYYY format)
+- Specify rivalry_period_end: when it ended or was resolved (YYYY format, or null if ongoing/unresolved)
+
 Return a structured analysis with:
-- rivalry_exists, rivalry_score, summary (required)
-- facts: specific rivalry facts with dates and categories (required)
-- timeline: chronological events for both people (required)
+- entity1, entity2: RivalryEntity objects with biographical data (required)
+- rivalry_exists, rivalry_score, rivalry_period_start, rivalry_period_end, summary (required)
+- timeline: rivalry-relevant events ONLY, not full biographies (required)
 - Base all information on BOTH Wikidata and biographical document searches"""
 
 # Get model from environment variable, default to Gemini
@@ -160,6 +285,13 @@ def analyze_rivalry(
     logger.debug(f"Found {len(relationships)} direct relationships")
     logger.debug(f"Found {len(shared_properties)} shared properties")
     
+    # Create RivalryEntity objects with biographical data from Wikidata
+    rivalry_entity1 = create_rivalry_entity(entity1)
+    rivalry_entity2 = create_rivalry_entity(entity2)
+    
+    logger.debug(f"Entity 1 biographical data: birth={rivalry_entity1.birth_date}, death={rivalry_entity1.death_date}")
+    logger.debug(f"Entity 2 biographical data: birth={rivalry_entity2.birth_date}, death={rivalry_entity2.death_date}")
+    
     # Prepare context for the AI agent
     entity1_details = format_entity_details(entity1)
     entity2_details = format_entity_details(entity2)
@@ -168,12 +300,20 @@ def analyze_rivalry(
 Entity 1:
 - ID: {entity1.id}
 - Name: {entity1.label}
-- Description: {entity1.description or 'N/A'}{entity1_details}
+- Description: {entity1.description or 'N/A'}
+- Birth Date: {rivalry_entity1.birth_date or 'Unknown'}
+- Death Date: {rivalry_entity1.death_date or 'Unknown'}
+- Occupation: {', '.join(rivalry_entity1.occupation) if rivalry_entity1.occupation else 'N/A'}
+- Nationality: {rivalry_entity1.nationality or 'N/A'}{entity1_details}
 
 Entity 2:
 - ID: {entity2.id}
 - Name: {entity2.label}
-- Description: {entity2.description or 'N/A'}{entity2_details}
+- Description: {entity2.description or 'N/A'}
+- Birth Date: {rivalry_entity2.birth_date or 'Unknown'}
+- Death Date: {rivalry_entity2.death_date or 'Unknown'}
+- Occupation: {', '.join(rivalry_entity2.occupation) if rivalry_entity2.occupation else 'N/A'}
+- Nationality: {rivalry_entity2.nationality or 'N/A'}{entity2_details}
 
 Direct Relationships Found:
 """

@@ -121,20 +121,36 @@ def main():
         print("=" * 70)
         print("RIVALRY ANALYSIS")
         print("=" * 70)
-        print(f"\n{analysis.entity1_label} vs {analysis.entity2_label}")
+        print(f"\n{analysis.entity1.label} vs {analysis.entity2.label}")
         print(f"Rivalry: {'YES' if analysis.rivalry_exists else 'NO'}")
         print(f"Score: {analysis.rivalry_score:.2f}/1.00")
         
+        if analysis.rivalry_period_start or analysis.rivalry_period_end:
+            period_start = analysis.rivalry_period_start or "?"
+            period_end = analysis.rivalry_period_end or "ongoing"
+            print(f"Period: {period_start} - {period_end}")
+        
         print(f"\n📝 Summary:\n{analysis.summary}")
         
-        if analysis.facts:
-            print(f"\n🔍 Facts ({len(analysis.facts)}):")
-            for i, fact in enumerate(analysis.facts, 1):
-                print(f"\n{i}. {fact.fact}")
-                if fact.date:
-                    print(f"   Date: {fact.date}")
-                if fact.category:
-                    print(f"   Category: {fact.category}")
+        # Show entity biographical info
+        print(f"\n👤 {analysis.entity1.label}:")
+        if analysis.entity1.birth_date:
+            print(f"   Born: {analysis.entity1.birth_date}")
+        if analysis.entity1.death_date:
+            print(f"   Died: {analysis.entity1.death_date}")
+        
+        print(f"\n👤 {analysis.entity2.label}:")
+        if analysis.entity2.birth_date:
+            print(f"   Born: {analysis.entity2.birth_date}")
+        if analysis.entity2.death_date:
+            print(f"   Died: {analysis.entity2.death_date}")
+        
+        if analysis.timeline:
+            print(f"\n📅 Rivalry Timeline ({len(analysis.timeline)} events):")
+            for event in analysis.timeline:
+                print(f"\n  {event.date} [{event.rivalry_relevance.upper()}]")
+                print(f"    {event.description}")
+                print(f"    Entity: {event.entity_id}")
         
         if analysis.relationships:
             print(f"\n🔗 Wikidata Relationships ({len(analysis.relationships)}):")

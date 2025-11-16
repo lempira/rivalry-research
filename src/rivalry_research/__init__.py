@@ -8,7 +8,7 @@ from .models import (
     EntitySearchResult,
     Relationship,
     RivalryAnalysis,
-    RivalryFact,
+    RivalryEntity,
     TimelineEvent,
     WikidataEntity,
 )
@@ -42,7 +42,7 @@ __all__ = [
     "EntitySearchResult",
     "WikidataEntity",
     "Relationship",
-    "RivalryFact",
+    "RivalryEntity",
     "RivalryAnalysis",
     "TimelineEvent",
     # Advanced functions
