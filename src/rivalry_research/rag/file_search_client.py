@@ -1,5 +1,6 @@
 """Google File Search API client for RAG."""
 
+import logging
 import os
 import time
 from pathlib import Path
@@ -9,6 +10,8 @@ from google import genai
 from google.genai import types
 
 from ..models import WikidataEntity
+
+logger = logging.getLogger(__name__)
 
 # Global store name for all rivalry research documents
 GLOBAL_STORE_NAME = "rivalry_research_sources"
@@ -52,6 +55,7 @@ def get_or_create_store() -> Any:
         >>> print(store.name)
         'fileSearchStores/abc123'
     """
+    logger.debug("Getting or creating File Search store")
     client = _get_client()
     
     # Try to list existing stores and find our global store
@@ -62,8 +66,10 @@ def get_or_create_store() -> Any:
         store = client.file_search_stores.create(
             config={"display_name": GLOBAL_STORE_NAME}
         )
+        logger.info(f"Using File Search store: {store.name}")
         return store
     except Exception as e:
+        logger.error(f"Failed to create File Search store: {e}")
         raise Exception(f"Failed to create File Search store: {e}") from e
 
 
@@ -95,6 +101,9 @@ def upload_document(
         >>> content = fetch_wikipedia_article(entity)
         >>> operation = upload_document(store.name, entity, content)
     """
+    logger.debug(f"Uploading document for entity {entity.id}: {entity.label}")
+    logger.debug(f"Content size: {len(content)} characters")
+    
     client = _get_client()
     
     # Create a temporary file with the content
@@ -104,8 +113,10 @@ def upload_document(
         
         # Display name includes entity info for citations
         display_name = f"{entity.label} ({entity.id}) - Wikipedia"
+        logger.debug(f"Display name for citations: {display_name}")
         
         # Upload and import the file
+        logger.debug(f"Starting upload to store: {store_name}")
         operation = client.file_search_stores.upload_to_file_search_store(
             file=str(temp_file),
             file_search_store_name=store_name,
@@ -113,21 +124,25 @@ def upload_document(
         )
         
         # Wait for import to complete
+        logger.debug("Waiting for document import to complete...")
         start_time = time.time()
         while not operation.done:
             if time.time() - start_time > timeout:
+                logger.error(f"Document import timed out after {timeout} seconds")
                 raise TimeoutError(
                     f"Document import timed out after {timeout} seconds"
                 )
             time.sleep(5)
             operation = client.operations.get(operation)
         
+        logger.info(f"Document uploaded successfully for {entity.label}")
         return operation
         
     finally:
         # Clean up temp file
         if temp_file.exists():
             temp_file.unlink()
+            logger.debug(f"Cleaned up temporary file: {temp_file}")
 
 
 def check_document_exists(store_name: str, entity_id: str) -> bool:
@@ -148,17 +163,10 @@ def check_document_exists(store_name: str, entity_id: str) -> bool:
         >>> if not check_document_exists(store.name, "Q935"):
         ...     # Upload document
     """
-    client = _get_client()
-    
-    try:
-        # List documents in the store
-        # Note: The API may not have a direct list method in the current version,
-        # so for now we'll always return False (allow uploads)
-        # This is safe as File Search handles duplicates gracefully
-        return False
-    except Exception:
-        # If we can't check, assume it doesn't exist
-        return False
+    # Note: The API may not have a direct list method in the current version,
+    # so for now we'll always return False (allow uploads)
+    # This is safe as File Search handles duplicates gracefully
+    return False
 
 
 def query_store(

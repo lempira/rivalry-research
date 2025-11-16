@@ -1,5 +1,6 @@
 """Fetch Wikipedia article content for entities."""
 
+import logging
 import re
 import time
 from urllib.parse import unquote, urlparse
@@ -8,6 +9,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from ..models import WikidataEntity
+
+logger = logging.getLogger(__name__)
 
 # Wikipedia API endpoint
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
@@ -183,9 +186,17 @@ def fetch_wikipedia_article(entity: WikidataEntity, timeout: float = 30.0) -> st
         >>> document = fetch_wikipedia_article(entity)
         >>> print(document[:200])
     """
+    logger.info(f"Fetching Wikipedia article for {entity.label} ({entity.id})")
+    
     if not entity.wikipedia_url:
+        logger.error(f"Entity {entity.id} has no Wikipedia URL")
         raise ValueError(f"Entity {entity.id} has no Wikipedia URL")
     
+    logger.debug(f"Wikipedia URL: {entity.wikipedia_url}")
     article_title, article_text = fetch_wikipedia_content(entity.wikipedia_url, timeout)
+    
+    logger.info(f"Fetched article '{article_title}' ({len(article_text)} characters)")
+    logger.debug(f"Article preview: {article_text[:200]}...")
+    
     return format_as_document(article_title, article_text, entity)
 

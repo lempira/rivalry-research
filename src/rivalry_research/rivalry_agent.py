@@ -1,5 +1,6 @@
 """Pydantic-AI agent for analyzing rivalrous relationships."""
 
+import logging
 import os
 from typing import Any
 
@@ -7,6 +8,8 @@ from google.genai import types
 from pydantic_ai import Agent
 
 from .models import RivalryAnalysis, WikidataEntity, Relationship
+
+logger = logging.getLogger(__name__)
 
 
 def extract_claim_values(claims: dict[str, Any], property_id: str, limit: int = 5) -> list[str]:
@@ -189,6 +192,12 @@ def analyze_rivalry(
         >>> # With File Search for enriched analysis
         >>> analysis = analyze_rivalry(entity1, entity2, rels, shared, store_name="fileSearchStores/abc")
     """
+    logger.info(f"Analyzing rivalry: {entity1.label} vs {entity2.label}")
+    logger.debug(f"Entity 1 details: {format_entity_details(entity1)}")
+    logger.debug(f"Entity 2 details: {format_entity_details(entity2)}")
+    logger.debug(f"Found {len(relationships)} direct relationships")
+    logger.debug(f"Found {len(shared_properties)} shared properties")
+    
     # Prepare context for the AI agent
     entity1_details = format_entity_details(entity1)
     entity2_details = format_entity_details(entity2)
@@ -255,7 +264,12 @@ Combine insights from both Wikidata and biographical documents for a comprehensi
 
     # Configure agent with File Search if store provided
     if store_name:
+        logger.info(f"Using File Search store: {store_name}")
+        logger.debug("Agent will query biographical documents via File Search")
+        logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
+        
         # Run agent with File Search tool
+        logger.info("Running AI agent with File Search...")
         result = rivalry_agent.run_sync(
             context,
             model_settings={
@@ -269,7 +283,16 @@ Combine insights from both Wikidata and biographical documents for a comprehensi
             },
         )
     else:
+        logger.info("Using Wikidata data only (no File Search)")
+        logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
+        
         # Run agent with Wikidata data only
+        logger.info("Running AI agent...")
         result = rivalry_agent.run_sync(context)
+    
+    logger.info(
+        f"Agent analysis complete: rivalry={result.output.rivalry_exists}, "
+        f"score={result.output.rivalry_score:.2f}"
+    )
     
     return result.output

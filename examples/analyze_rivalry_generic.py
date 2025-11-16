@@ -1,6 +1,8 @@
 """Generic rivalry analysis - analyze any two people."""
 
+import argparse
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -8,24 +10,52 @@ from pathlib import Path
 from rivalry_research import search_person, analyze_rivalry
 
 
+def setup_logging(level: str = "INFO"):
+    """
+    Configure logging for the application.
+    
+    Args:
+        level: Logging level (DEBUG, INFO, WARNING, ERROR)
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+
 def main():
     """Analyze rivalry between any two people provided as arguments."""
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Analyze rivalry between two people using Wikidata and RAG",
+        epilog="Examples:\n"
+               '  python analyze_rivalry_generic.py "Isaac Newton" "Gottfried Leibniz"\n'
+               '  python analyze_rivalry_generic.py "Steve Jobs" "Bill Gates" --log-level DEBUG\n'
+               '  python analyze_rivalry_generic.py "Messi" "Ronaldo"',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("person1", help="First person's name")
+    parser.add_argument("person2", help="Second person's name")
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Set logging level (default: INFO)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Setup logging BEFORE importing/using the library
+    setup_logging(args.log_level)
     
     if not os.getenv("GOOGLE_API_KEY"):
         print("⚠️  Set GOOGLE_API_KEY environment variable")
         return
     
-    # Get person names from command line arguments
-    if len(sys.argv) < 3:
-        print("Usage: python analyze_rivalry_generic.py <person1> <person2>")
-        print("\nExample:")
-        print('  python analyze_rivalry_generic.py "Isaac Newton" "Gottfried Leibniz"')
-        print('  python analyze_rivalry_generic.py "Steve Jobs" "Bill Gates"')
-        print('  python analyze_rivalry_generic.py "Messi" "Ronaldo"')
-        sys.exit(1)
-    
-    person1_name = sys.argv[1]
-    person2_name = sys.argv[2]
+    person1_name = args.person1
+    person2_name = args.person2
     
     print(f"🔍 Rivalry Research - {person1_name} vs {person2_name}\n")
     
