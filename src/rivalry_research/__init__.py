@@ -2,6 +2,8 @@
 
 import logging
 
+import logfire
+
 from .models import (
     EntitySearchResult,
     Relationship,
@@ -20,6 +22,13 @@ from .search import get_person_by_id, search_person
 from .sources.wikipedia_fetcher import fetch_wikipedia_article
 
 logger = logging.getLogger(__name__)
+
+# Configure Logfire for console-only observability (no web service)
+logfire.configure(
+    send_to_logfire='never',  # Console only, don't send to web
+    console=logfire.ConsoleOptions(span_style='simple'),
+)
+logfire.instrument_pydantic_ai()
 
 __version__ = "0.1.0"
 

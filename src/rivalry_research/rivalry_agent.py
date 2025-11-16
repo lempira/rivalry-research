@@ -4,60 +4,13 @@ import logging
 import os
 from typing import Any
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, InstrumentationSettings
 
 from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship
 from .rag.file_search_client import query_store
 
 logger = logging.getLogger(__name__)
-
-
-def extract_claim_values(claims: dict[str, Any], property_id: str, limit: int = 5) -> list[str]:
-    """
-    Extract human-readable values from Wikidata claims for a specific property.
-    
-    Args:
-        claims: The claims dictionary from a WikidataEntity
-        property_id: The property ID to extract (e.g., 'P106' for occupation)
-        limit: Maximum number of values to return
-    
-    Returns:
-        List of string values (labels or formatted values)
-    """
-    if property_id not in claims:
-        return []
-    
-    values = []
-    for claim in claims[property_id][:limit]:
-        try:
-            mainsnak = claim.get('mainsnak', {})
-            datavalue = mainsnak.get('datavalue', {})
-            datatype = datavalue.get('type')
-            
-            if datatype == 'wikibase-entityid':
-                # Entity reference - try to get label
-                value_data = datavalue.get('value', {})
-                entity_id = value_data.get('id')
-                if entity_id:
-                    values.append(entity_id)  # We don't have labels, just use ID for now
-            elif datatype == 'time':
-                # Date value
-                time_value = datavalue.get('value', {}).get('time', '')
-                # Format: +1643-01-04T00:00:00Z -> 1643
-                if time_value:
-                    year = time_value.split('-')[0].replace('+', '')
-                    values.append(year)
-            elif datatype == 'string':
-                # String value
-                string_value = datavalue.get('value', '')
-                if string_value:
-                    values.append(string_value)
-        except (KeyError, AttributeError, IndexError):
-            continue
-    
-    return values
-
 
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
@@ -100,11 +53,16 @@ MODEL = os.getenv("RIVALRY_MODEL", "google-gla:gemini-2.5-flash")
 
 # Create the rivalry analysis agent
 # The agent will return a RivalryAnalysis model with structured output
+# Configure instrumentation for Logfire observability (console only)
 rivalry_agent = Agent(
     MODEL,
     output_type=RivalryAnalysis,
     system_prompt=SYSTEM_PROMPT,
     deps_type=str,  # Store name passed as dependency
+    instrument=InstrumentationSettings(
+        include_content=True,  # Include tool args/responses
+        version=3,             # OpenTelemetry GenAI v3
+    ),
 )
 
 
