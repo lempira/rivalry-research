@@ -150,6 +150,12 @@ def main():
             for event in analysis.timeline:
                 print(f"\n  {event.date} [{event.rivalry_relevance.upper()}]")
                 print(f"    {event.description}")
+                
+                # Display direct quotes if present
+                if event.direct_quotes:
+                    for quote in event.direct_quotes:
+                        print(f"    💬 {quote}")
+                
                 print(f"    Entity: {event.entity_id}")
         
         if analysis.relationships:

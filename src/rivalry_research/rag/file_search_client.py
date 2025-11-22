@@ -1,7 +1,6 @@
 """Google File Search API client for RAG."""
 
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -9,6 +8,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
+from ..config import get_settings
 from ..models import WikidataEntity
 
 logger = logging.getLogger(__name__)
@@ -24,17 +24,16 @@ def _get_client() -> genai.Client:
     """
     Get Google GenAI client instance.
     
+    Uses Pydantic Settings to load API key from environment or .env file.
+    
     Returns:
         Configured genai.Client
     
     Raises:
-        ValueError: If GOOGLE_API_KEY not set
+        ValidationError: If GOOGLE_API_KEY not set or invalid
     """
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY environment variable not set")
-    
-    return genai.Client(api_key=api_key)
+    settings = get_settings()
+    return genai.Client(api_key=settings.google_api_key)
 
 
 def get_or_create_store() -> Any:
@@ -266,36 +265,51 @@ def list_stores() -> list[Any]:
         raise Exception(f"Failed to list stores: {e}") from e
 
 
-def list_documents(store_name: str) -> list[Any]:
+def list_documents(store_name: str) -> dict[str, Any]:
     """
-    List all documents in a File Search store.
+    Get document counts for a File Search store.
+    
+    Note: The File Search API does not support listing individual documents.
+    This function returns document counts from the store metadata instead.
     
     Args:
         store_name: File Search store name (e.g., 'fileSearchStores/abc123')
     
     Returns:
-        List of document objects with metadata
+        Dict with document counts:
+            - active: Number of active/ready documents
+            - pending: Number of documents being processed
+            - failed: Number of failed documents
+            - total: Total document count
     
     Raises:
-        Exception: If listing fails
+        Exception: If getting store info fails
     
     Example:
-        >>> docs = list_documents("fileSearchStores/abc123")
-        >>> for doc in docs:
-        ...     print(f"{doc.display_name}: {doc.name}")
+        >>> counts = list_documents("fileSearchStores/abc123")
+        >>> print(f"Active: {counts['active']}, Pending: {counts['pending']}")
     """
     client = _get_client()
     
     try:
-        documents = []
-        for doc in client.file_search_stores.list_documents(
-            file_search_store_name=store_name
-        ):
-            documents.append(doc)
-        logger.debug(f"Found {len(documents)} documents in store {store_name}")
-        return documents
+        store = client.file_search_stores.get(name=store_name)
+        
+        # Extract document counts from store metadata
+        active = int(getattr(store, 'active_documents_count', 0) or 0)
+        pending = int(getattr(store, 'pending_documents_count', 0) or 0)
+        failed = int(getattr(store, 'failed_documents_count', 0) or 0)
+        
+        counts = {
+            'active': active,
+            'pending': pending,
+            'failed': failed,
+            'total': active + pending + failed,
+        }
+        
+        logger.debug(f"Document counts for {store_name}: {counts}")
+        return counts
     except Exception as e:
-        raise Exception(f"Failed to list documents: {e}") from e
+        raise Exception(f"Failed to get document counts: {e}") from e
 
 
 def health_check(store_name: str) -> dict[str, Any]:
@@ -347,26 +361,25 @@ def health_check(store_name: str) -> dict[str, Any]:
         health["accessible"] = True
         logger.debug(f"Store accessible: {store.name}")
         
-        # Count documents
-        logger.debug("Counting documents...")
-        docs = list_documents(store_name)
-        health["document_count"] = len(docs)
+        # Get document counts
+        logger.debug("Getting document counts...")
+        doc_counts = list_documents(store_name)
+        health["document_count"] = doc_counts['total']
         
         if health["document_count"] == 0:
             health["issues"].append("No documents in store")
         
-        # Check all docs processed
+        # Check if all docs processed
         logger.debug("Checking document processing status...")
-        pending = []
-        for doc in docs:
-            # Check if document has a state attribute and if it's not completed
-            state = getattr(doc, 'state', 'ACTIVE')
-            if state != 'ACTIVE':
-                pending.append(doc)
+        pending_count = doc_counts['pending']
+        failed_count = doc_counts['failed']
         
-        health["all_processed"] = len(pending) == 0
-        if pending:
-            health["issues"].append(f"{len(pending)} documents not completed")
+        health["all_processed"] = pending_count == 0 and failed_count == 0
+        
+        if pending_count > 0:
+            health["issues"].append(f"{pending_count} documents still processing")
+        if failed_count > 0:
+            health["issues"].append(f"{failed_count} documents failed")
         
         # Test query only if we have documents
         if health["document_count"] > 0:

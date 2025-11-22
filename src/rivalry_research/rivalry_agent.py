@@ -1,11 +1,11 @@
 """Pydantic-AI agent for analyzing rivalrous relationships."""
 
 import logging
-import os
 from typing import Any
 
 from pydantic_ai import Agent, RunContext, InstrumentationSettings
 
+from .config import get_settings
 from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity
 from .rag.file_search_client import query_store
@@ -127,14 +127,15 @@ def create_rivalry_entity(wikidata_entity: WikidataEntity) -> RivalryEntity:
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
 
-IMPORTANT: You have access to a 'search_biographical_documents' tool. You MUST use this tool to query biographical information about both people before completing your analysis.
+IMPORTANT: You have access to a 'search_biographical_documents' tool. You MUST use this tool extensively to query biographical information about both people before completing your analysis.
 
 Your task is to:
-1. Use the 'search_biographical_documents' tool to query information about both people (make multiple queries as needed)
+1. Use the 'search_biographical_documents' tool to query information about both people (make multiple targeted queries)
 2. Analyze the provided entity data, direct relationships, and shared properties from Wikidata
 3. Combine insights from biographical documents and Wikidata to determine if a rivalrous relationship exists
 4. Extract specific factual incidents or events with dates that demonstrate the rivalry
-5. Be conservative - only mark rivalry_exists=True if there's clear evidence
+5. CAPTURE THE DRAMA: Focus on direct interactions, confrontations, insults, and heated exchanges
+6. Be conservative - only mark rivalry_exists=True if there's clear evidence
 
 Guidelines:
 - Focus on factual, verifiable information from Wikidata and biographical sources
@@ -144,6 +145,16 @@ Guidelines:
 - If no rivalry is evident, set rivalry_exists=False and explain why in the summary
 - Each fact should be concise and specific, with dates when available
 
+DRAMA AND INTERACTION REQUIREMENTS:
+- CAPTURE SPECIFIC INTERACTIONS: Document face-to-face meetings, public debates, published responses, letters
+- EXTRACT DIRECT QUOTES: When people insulted, criticized, or challenged each other, include their EXACT WORDS with attribution
+- HIGHLIGHT DRAMA: Look for heated exchanges, public humiliations, professional sabotage, personal attacks, priority disputes
+- DOCUMENT INSULTS: Any derogatory language, dismissive comments, or personal attacks should be captured verbatim
+- PROVIDE CONTEXT: For each interaction, explain the setting, what led to it, and what resulted from it
+- EMOTIONAL DETAILS: Describe the tone and intensity of interactions (cordial, tense, hostile, bitter, heated)
+- RESPONSES AND REACTIONS: Document how each person responded to the other's actions or statements
+- WITNESSES: Note if interactions were public, who was present, or how widely known they became
+
 Using Wikidata Structured Data:
 - Shared properties reveal implicit connections even without direct relationships
 - Look for competitive overlap: same field of work, same achievements, same era
@@ -152,46 +163,84 @@ Using Wikidata Structured Data:
 - Shared institutions/awards/fields provide context for potential conflict
 
 Using the search_biographical_documents Tool:
-- Call this tool with queries about: timeline events, conflicts, disputes, controversies, achievements, publications
-- Query for specific information like: "conflicts between [person1] and [person2]"
-- Query for timeline information: "key dates in [person]'s career"
-- Look for priority disputes or competing claims
-- Make multiple tool calls to thoroughly investigate
+MAKE MULTIPLE TARGETED QUERIES to extract dramatic interactions:
+- "conflicts between [person1] and [person2]"
+- "disputes between [person1] and [person2]"
+- "what [person1] said about [person2]" (and reverse)
+- "criticisms by [person1] of [person2]" (and reverse)
+- "meetings between [person1] and [person2]"
+- "public confrontations" + both names
+- "published attacks" or "published criticisms" + both names
+- "personal animosity" or "hostility" + both names
+- "insults" or "verbal attacks" + both names
+- "[person1] response to [person2]"
+- "relationship between [person1] and [person2]"
+- "rivalry" or "feud" + both names
+- Look for biography sections labeled: "Controversy", "Dispute", "Rivalry", "Conflict", "Relationship with X"
+- Query for correspondence, published papers that reference each other, public statements
+- Make 5-10 targeted queries minimum to thoroughly investigate the dramatic aspects
 
 Entity Data Requirements:
 - Populate entity1 and entity2 objects with biographical data (birth_date, death_date already provided)
 - Use the entity IDs provided in the context for entity_id fields
 
-Timeline Requirements (RIVALRY-FOCUSED ONLY):
+Timeline Requirements (RIVALRY-FOCUSED WITH DRAMATIC DETAIL):
 - Extract ONLY rivalry-relevant events (DO NOT include full biographical timelines)
 - Include events with rivalry_relevance:
-  * 'direct': Head-to-head conflicts, disputes, public disagreements
+  * 'direct': Head-to-head conflicts, disputes, public disagreements, face-to-face confrontations
   * 'parallel': Competing publications, simultaneous discoveries, overlapping achievements
   * 'context': Entry into same field or establishing competitive overlap (minimal, only if essential)
   * 'resolution': Joint awards, acknowledgments, reconciliation
 - EXCLUDE: births, deaths, general education, unrelated achievements, routine career milestones
-- For each event: date, event_type, description, entity_id (use entity1.id, entity2.id, or 'both'), rivalry_relevance
-- Include sources/citations where available
+
+For EACH event provide:
+- date: Specific date or time period
+- event_type: achievement, conflict, debate, meeting, publication, correspondence, etc.
+- description: RICH NARRATIVE including:
+  * Setting and circumstances (where, when, who was present)
+  * What happened in detail (actions, statements, reactions)
+  * Emotional tone (cordial, tense, hostile, bitter)
+  * How each person responded or reacted
+  * Immediate and longer-term impact on their relationship
+  * Any dramatic elements (public humiliation, escalation, reconciliation)
+- direct_quotes: Array of verbatim quotes WITH ATTRIBUTION
+  * Format: "Person Name: 'exact quote here'"
+  * PRIORITIZE: insults, criticisms, dismissive comments, challenges, defenses
+  * Include both the attack and any response if available
+- entity_id: Use entity1.id, entity2.id, or 'both'
+- rivalry_relevance: direct/parallel/context/resolution
+- sources: Citations where available
 - Sort events chronologically
 
 Rivalry Period:
 - Specify rivalry_period_start: when the rivalry/competition began (YYYY format)
 - Specify rivalry_period_end: when it ended or was resolved (YYYY format, or null if ongoing/unresolved)
 
+Summary Requirements (CAPTURE THE DRAMA):
+- Length: 200-300 words to accommodate rich narrative
+- Opening: Lead with the most dramatic or defining aspect of their rivalry
+- Include: 1-2 specific examples of their most hostile or significant interactions
+- Quotes: Weave in the most cutting or revealing quotes (briefly, full quotes go in timeline)
+- Evolution: Describe how the rivalry evolved (e.g., cordial → competitive → hostile)
+- Tone: Note whether it was professional competition, personal animosity, or both
+- Context: Mention any external factors (national pride, priority disputes, professional jealousy)
+- Impact: How the rivalry influenced their work or their field
+- Resolution: How it ended (if it did) - reconciliation, death, fading away
+
 Return a structured analysis with:
 - entity1, entity2: RivalryEntity objects with biographical data (required)
 - rivalry_exists, rivalry_score, rivalry_period_start, rivalry_period_end, summary (required)
-- timeline: rivalry-relevant events ONLY, not full biographies (required)
+- timeline: rivalry-relevant events ONLY with rich descriptions and quotes (required)
 - Base all information on BOTH Wikidata and biographical document searches"""
 
-# Get model from environment variable, default to Gemini
-MODEL = os.getenv("RIVALRY_MODEL", "google-gla:gemini-2.5-flash")
+# Get settings (loads from .env or environment)
+settings = get_settings()
 
 # Create the rivalry analysis agent
 # The agent will return a RivalryAnalysis model with structured output
 # Configure instrumentation for Logfire observability (console only)
 rivalry_agent = Agent(
-    MODEL,
+    settings.rivalry_model,
     output_type=RivalryAnalysis,
     system_prompt=SYSTEM_PROMPT,
     deps_type=str,  # Store name passed as dependency

@@ -95,7 +95,7 @@ def cmd_list_stores(args: argparse.Namespace) -> int:
 
 
 def cmd_list_docs(args: argparse.Namespace) -> int:
-    """List documents in File Search stores."""
+    """List document counts in File Search stores."""
     try:
         # If no store specified, list docs from all stores
         if args.store_name:
@@ -106,114 +106,84 @@ def cmd_list_docs(args: argparse.Namespace) -> int:
                 print("No File Search stores found.")
                 return 0
         
-        all_docs = []
+        all_store_counts = []
         
         for store in stores:
             try:
-                docs = file_search_client.list_documents(store.name)
+                doc_counts = file_search_client.list_documents(store.name)
                 
-                # Apply limit if specified
-                if args.limit:
-                    docs = docs[:args.limit]
+                # Get store display name
+                display_name = getattr(store, 'display_name', 'Unknown')
                 
-                for doc in docs:
-                    doc_data = {
-                        'store_name': store.name,
-                        'doc': doc
-                    }
-                    all_docs.append(doc_data)
+                all_store_counts.append({
+                    'store_name': store.name,
+                    'display_name': display_name,
+                    'counts': doc_counts,
+                })
                     
             except Exception as e:
                 if args.json:
-                    all_docs.append({
+                    all_store_counts.append({
                         'store_name': store.name,
                         'error': str(e)
                     })
                 else:
-                    print(f"Error listing documents from {store.name}: {e}", file=sys.stderr)
+                    print(f"Error getting documents from {store.name}: {e}", file=sys.stderr)
         
         if args.json:
             # JSON output
-            output = []
-            for item in all_docs:
-                if 'error' in item:
-                    output.append(item)
-                else:
-                    doc = item['doc']
-                    doc_data = {
-                        "store_name": item['store_name'],
-                        "name": doc.name,
-                        "display_name": getattr(doc, 'display_name', None),
-                        "create_time": getattr(doc, 'create_time', None),
-                        "state": getattr(doc, 'state', None),
-                    }
-                    output.append(doc_data)
-            print(json.dumps(output, indent=2))
+            print(json.dumps(all_store_counts, indent=2))
             return 0
         
         # Human-readable output
-        if not all_docs:
-            print("No documents found.")
+        if not all_store_counts:
+            print("No stores found.")
             return 0
         
-        # Group by store
-        current_store = None
-        total_count = 0
-        ready_count = 0
+        print("\nNote: The File Search API does not support listing individual documents.")
+        print("Showing document counts per store instead.\n")
         
-        for item in all_docs:
+        total_active = 0
+        total_pending = 0
+        total_failed = 0
+        
+        for item in all_store_counts:
             if 'error' in item:
+                print(f"✗ {item['store_name']}")
+                print(f"  Error: {item['error']}\n")
                 continue
-                
-            doc = item['doc']
             
-            # Print store header if changed
-            if current_store != item['store_name']:
-                if current_store is not None:
-                    print()
-                current_store = item['store_name']
-                
-                # Get store display name if possible
-                display_name = "Unknown"
-                try:
-                    all_stores = file_search_client.list_stores()
-                    for s in all_stores:
-                        if s.name == current_store:
-                            display_name = getattr(s, 'display_name', 'Unknown')
-                            break
-                except:
-                    pass
-                
-                print(f"\nDocuments in {current_store} ({display_name}):")
-                print("━" * 70)
+            counts = item['counts']
+            display_name = item['display_name']
             
-            # Document details
-            display_name = getattr(doc, 'display_name', 'N/A')
-            create_time = getattr(doc, 'create_time', None)
-            state = getattr(doc, 'state', 'ACTIVE')
+            print(f"Store: {item['store_name']} ({display_name})")
+            print("━" * 70)
             
-            # Status icon
-            if state == 'ACTIVE':
-                icon = "✓"
-                ready_count += 1
-            elif state == 'PROCESSING':
-                icon = "⏳"
-            else:
-                icon = "✗"
+            # Show counts with icons
+            if counts['active'] > 0:
+                print(f"  ✓ Active (ready):  {counts['active']} document{'s' if counts['active'] != 1 else ''}")
             
-            print(f"{icon} {display_name}")
-            print(f"  ID: {doc.name}")
-            print(f"  Uploaded: {format_timestamp(create_time)}")
-            print(f"  Status: {state.lower()}")
+            if counts['pending'] > 0:
+                print(f"  ⏳ Pending:        {counts['pending']} document{'s' if counts['pending'] != 1 else ''}")
             
-            total_count += 1
+            if counts['failed'] > 0:
+                print(f"  ✗ Failed:         {counts['failed']} document{'s' if counts['failed'] != 1 else ''}")
+            
+            if counts['total'] == 0:
+                print("  (No documents)")
+            
+            print(f"  Total:           {counts['total']} document{'s' if counts['total'] != 1 else ''}")
             print()
+            
+            total_active += counts['active']
+            total_pending += counts['pending']
+            total_failed += counts['failed']
         
-        print(f"Total: {total_count} document{'s' if total_count != 1 else ''}", end='')
-        if total_count > ready_count:
-            print(f" ({ready_count} ready, {total_count - ready_count} processing)")
-        else:
-            print()
+        # Summary if multiple stores
+        if len(all_store_counts) > 1:
+            total = total_active + total_pending + total_failed
+            print(f"Summary: {total} total documents across {len(all_store_counts)} stores")
+            print(f"  ✓ {total_active} active, ⏳ {total_pending} pending, ✗ {total_failed} failed")
         
         return 0
         
