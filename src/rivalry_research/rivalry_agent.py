@@ -7,8 +7,10 @@ from pydantic_ai import Agent, RunContext, InstrumentationSettings
 
 from .config import get_settings
 from .logging_utils import format_entity_details, log_tool_usage
-from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity
+from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
 from .rag.file_search_client import query_store
+from .sources import fetch_sources_for_entity, validate_event_sources, compute_sources_summary
+from .storage import SourceDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -209,8 +211,18 @@ For EACH event provide:
   * Include both the attack and any response if available
 - entity_id: Use entity1.id, entity2.id, or 'both'
 - rivalry_relevance: direct/parallel/context/resolution
-- sources: Citations where available
+- sources: Array of EventSource objects with:
+  * source_id: Reference to one of the available source IDs provided in context
+  * supporting_text: The specific text from the source that supports this event
+  * page_reference: Page number or section (if applicable)
 - Sort events chronologically
+
+IMPORTANT SOURCE REQUIREMENTS:
+- You will be provided with available sources (with source_ids) for both entities
+- For EACH event, reference sources using their source_id from the provided list
+- Include the specific supporting_text that evidences the event
+- An event can reference multiple sources if multiple sources confirm it
+- The sources field must use the EventSource structure, NOT plain strings
 
 Rivalry Period:
 - Specify rivalry_period_start: when the rivalry/competition began (YYYY format)
@@ -230,8 +242,12 @@ Summary Requirements (CAPTURE THE DRAMA):
 Return a structured analysis with:
 - entity1, entity2: RivalryEntity objects with biographical data (required)
 - rivalry_exists, rivalry_score, rivalry_period_start, rivalry_period_end, summary (required)
-- timeline: rivalry-relevant events ONLY with rich descriptions and quotes (required)
-- Base all information on BOTH Wikidata and biographical document searches"""
+- timeline: rivalry-relevant events ONLY with rich descriptions, quotes, and EventSource references (required)
+- sources: Dictionary mapping source_id to Source objects (will be populated from available sources)
+- Base all information on BOTH Wikidata and biographical document searches
+
+NOTE: The sources dictionary and sources_summary will be populated automatically from the available sources.
+You only need to reference sources by their source_id in the timeline events."""
 
 # Get settings (loads from .env or environment)
 settings = get_settings()
@@ -302,6 +318,9 @@ def analyze_rivalry(
     
     The agent queries biographical documents via File Search to enrich the analysis
     with timeline events and narrative context.
+    
+    Fetches Wikipedia sources for both entities, stores them in SQLite database,
+    and passes source metadata to the agent for proper citation.
 
     The AI model used can be configured via the RIVALRY_MODEL environment variable.
     Defaults to "google-gla:gemini-2.5-flash" if not set.
@@ -314,7 +333,7 @@ def analyze_rivalry(
         store_name: File Search store name for biographical document access
 
     Returns:
-        RivalryAnalysis with structured rivalry data
+        RivalryAnalysis with structured rivalry data including source catalog
 
     Raises:
         Exception: If the AI model fails or returns invalid data
@@ -333,6 +352,21 @@ def analyze_rivalry(
     logger.debug(f"Entity 2 details: {format_entity_details(entity2)}")
     logger.debug(f"Found {len(relationships)} direct relationships")
     logger.debug(f"Found {len(shared_properties)} shared properties")
+    
+    # Initialize source database and fetch sources
+    settings = get_settings()
+    db = SourceDatabase(settings.sources_db_path)
+    
+    logger.info("Fetching Wikipedia sources for both entities")
+    sources_entity1 = fetch_sources_for_entity(db, settings.raw_sources_dir, entity1)
+    sources_entity2 = fetch_sources_for_entity(db, settings.raw_sources_dir, entity2)
+    
+    # Combine sources into a catalog
+    all_sources: dict[str, Source] = {}
+    for source in sources_entity1 + sources_entity2:
+        all_sources[source.source_id] = source
+    
+    logger.info(f"Fetched {len(all_sources)} total sources ({len(sources_entity1)} for {entity1.label}, {len(sources_entity2)} for {entity2.label})")
     
     # Create RivalryEntity objects with biographical data from Wikidata
     rivalry_entity1 = create_rivalry_entity(entity1)
@@ -394,6 +428,22 @@ Direct Relationships Found:
     else:
         context += "\nNo shared properties found."
 
+    # Add available sources information
+    context += "\n\nAvailable Sources (for citation in timeline events):"
+    if all_sources:
+        context += "\n"
+        for source in all_sources.values():
+            context += f"""
+- Source ID: {source.source_id}
+  - Type: {source.type}
+  - Title: {source.title}
+  - URL: {source.url}
+  - Credibility: {source.credibility_score:.2f}
+  - Primary Source: {source.is_primary_source}
+"""
+    else:
+        context += "\nNo sources available."
+    
     # Add instruction about biographical documents
     context += """
 
@@ -405,10 +455,12 @@ Query these documents to find:
 - Evidence of conflicts, disputes, or competitive interactions
 - Context about their relationship or lack thereof
 
+When creating timeline events, reference the sources above using their source_id.
+Include the supporting_text from the source that evidences the event.
 Combine insights from both Wikidata and biographical documents for a comprehensive analysis.
 """
     
-    context += "Based on this data, analyze if a rivalry exists between these two people."
+    context += "\nBased on this data, analyze if a rivalry exists between these two people."
 
     # Run agent with search tool
     logger.info(f"Using File Search store: {store_name}")
@@ -429,4 +481,34 @@ Combine insights from both Wikidata and biographical documents for a comprehensi
         f"score={result.output.rivalry_score:.2f}"
     )
     
-    return result.output
+    analysis = result.output
+    
+    # Post-process: Populate sources catalog
+    analysis.sources = all_sources
+    
+    # Post-process: Validate and enrich timeline events
+    logger.info("Validating and enriching timeline event sources")
+    for event in analysis.timeline:
+        validation = validate_event_sources(event.sources, all_sources)
+        event.source_count = validation["source_count"]
+        event.has_multiple_sources = validation["has_multiple_sources"]
+        event.has_primary_source = validation["has_primary_source"]
+        event.confidence = validation["confidence"]
+    
+    # Compute sources summary
+    analysis.sources_summary = compute_sources_summary(all_sources)
+    
+    # Add analysis metadata
+    analysis.analysis_metadata = {
+        "pipeline_version": "2.0",
+        "model_used": settings.rivalry_model,
+        "sources_searched": ["wikipedia"],
+        "total_sources": len(all_sources),
+    }
+    
+    logger.info(
+        f"Analysis complete with {len(all_sources)} sources, "
+        f"{len(analysis.timeline)} events"
+    )
+    
+    return analysis
