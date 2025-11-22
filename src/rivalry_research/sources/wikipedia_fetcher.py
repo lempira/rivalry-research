@@ -8,7 +8,8 @@ from urllib.parse import unquote, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from ..models import WikidataEntity
+from ..models import WikidataEntity, Source
+from .utils import generate_source_id, get_iso_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -163,40 +164,45 @@ Description: {entity.description or 'N/A'}
     return metadata_header + article_text
 
 
-def fetch_wikipedia_article(entity: WikidataEntity, timeout: float = 30.0) -> str:
+def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tuple[Source, str]:
     """
-    Fetch and format Wikipedia article for an entity.
-    
-    This is the main function to use for fetching Wikipedia content.
-    It fetches the article, cleans it, and formats it with metadata.
+    Fetch Wikipedia article as a Source object with content.
     
     Args:
         entity: WikidataEntity with wikipedia_url populated
         timeout: Request timeout in seconds
     
     Returns:
-        Formatted document ready for File Search upload
+        Tuple of (Source object, article_content)
     
     Raises:
         ValueError: If entity has no Wikipedia URL
         httpx.HTTPError: If the request fails
-    
-    Example:
-        >>> entity = get_entity("Q935")  # Isaac Newton
-        >>> document = fetch_wikipedia_article(entity)
-        >>> print(document[:200])
     """
-    logger.info(f"Fetching Wikipedia article for {entity.label} ({entity.id})")
+    logger.info(f"Fetching Wikipedia source for {entity.label} ({entity.id})")
     
     if not entity.wikipedia_url:
-        logger.error(f"Entity {entity.id} has no Wikipedia URL")
         raise ValueError(f"Entity {entity.id} has no Wikipedia URL")
     
-    logger.debug(f"Wikipedia URL: {entity.wikipedia_url}")
     article_title, article_text = fetch_wikipedia_content(entity.wikipedia_url, timeout)
     
-    logger.info(f"Fetched article '{article_title}' ({len(article_text)} characters)")
-    logger.debug(f"Article preview: {article_text[:200]}...")
+    source = Source(
+        source_id=generate_source_id(entity.wikipedia_url, "wiki"),
+        type="wikipedia",
+        title=article_title,
+        authors=["Wikipedia contributors"],
+        publication="Wikipedia",
+        publication_date=None,  # Wikipedia doesn't have a single publication date
+        url=entity.wikipedia_url,
+        retrieved_at=get_iso_timestamp(),
+        credibility_score=0.75,  # Wikipedia is generally credible but not primary
+        is_primary_source=False,
+    )
     
-    return format_as_document(article_title, article_text, entity)
+    # Format content with metadata header
+    content = format_as_document(article_title, article_text, entity)
+    
+    logger.info(f"Created Wikipedia source: {source.source_id} - {article_title}")
+    
+    return source, content
 
