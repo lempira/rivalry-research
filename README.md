@@ -7,6 +7,9 @@ Analyze rivalrous relationships between people using Wikidata's knowledge graph 
 - Search for people on Wikidata with disambiguation
 - Extract relationships between entities using SPARQL
 - AI-powered rivalry analysis with structured output
+- Automatic source fetching and deduplication (SQLite)
+- Source credibility scoring and validation
+- Persistent analysis storage with full citation tracking
 - Support for multiple AI providers (Gemini, OpenAI, Anthropic)
 
 ## Installation
@@ -38,10 +41,13 @@ analysis = analyze_rivalry(newton.id, leibniz.id)
 
 print(f"Rivalry exists: {analysis.rivalry_exists}")
 print(f"Score: {analysis.rivalry_score:.2f}")
+print(f"Sources: {len(analysis.sources)}")
 print(f"\n{analysis.summary}")
 
-for fact in analysis.facts:
-    print(f"- {fact.fact}")
+# Timeline events with sources
+for event in analysis.timeline:
+    print(f"[{event.date}] {event.description}")
+    print(f"  Sources: {event.source_count}, Confidence: {event.confidence:.2f}")
 ```
 
 ## CLI Commands
@@ -73,11 +79,26 @@ export GOOGLE_API_KEY="your-key"
 export RIVALRY_MODEL="google-gla:gemini-2.5-flash"  # optional, this is the default
 ```
 
+## Data Storage
+
+Analyses and sources are automatically saved:
+
+```
+data/
+├── sources.db              # SQLite - deduplicated sources
+├── raw_sources/            # Original content (HTML, PDF, text)
+└── analyses/               # Analysis outputs (JSON)
+    └── Q935_Q9047/
+        └── analysis.json
+```
+
 ## Examples
 
 ```python
 # Newton vs Leibniz - calculus priority dispute
 analysis = analyze_rivalry("Q935", "Q9047")
+
+# Analysis auto-saved to data/analyses/Q935_Q9047/analysis.json
 ```
 
 ## Development
