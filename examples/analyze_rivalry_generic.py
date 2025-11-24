@@ -10,6 +10,8 @@ from rivalry_research import search_person, analyze_rivalry
 
 LOG_LEVEL = "DEBUG"
 
+logger = logging.getLogger(__name__)
+
 def setup_logging(level: str):
     """
     Configure logging to show only rivalry_research logs.
@@ -66,119 +68,135 @@ def main():
     setup_logging(args.log_level)
     
     if not os.getenv("GOOGLE_API_KEY"):
-        print("⚠️  Set GOOGLE_API_KEY environment variable")
+        logger.error("⚠️  Set GOOGLE_API_KEY environment variable")
         return
     
     person1_name = args.person1
     person2_name = args.person2
     
-    print(f"🔍 Rivalry Research - {person1_name} vs {person2_name}\n")
+    logger.info(f"🔍 Rivalry Research - {person1_name} vs {person2_name}\n")
     
     # Search for first person
-    print(f"Searching for '{person1_name}'...")
+    logger.info(f"Searching for '{person1_name}'...")
     results1 = search_person(person1_name)
     if not results1:
-        print(f"❌ No results found for '{person1_name}'")
+        logger.error(f"❌ No results found for '{person1_name}'")
         return
     
     person1 = results1[0]
-    print(f"✓ {person1.label} ({person1.id})")
+    logger.info(f"✓ {person1.label} ({person1.id})")
     if person1.description:
-        print(f"  {person1.description}")
+        logger.info(f"  {person1.description}")
     
     # Show disambiguation options if multiple results
     if len(results1) > 1:
-        print(f"\n  Other matches found ({len(results1) - 1}):")
+        logger.info(f"\n  Other matches found ({len(results1) - 1}):")
         for i, result in enumerate(results1[1:4], 2):
-            print(f"    {i}. {result.label} - {result.description}")
-    print()
+            logger.info(f"    {i}. {result.label} - {result.description}")
+    logger.info("")
     
     # Search for second person
-    print(f"Searching for '{person2_name}'...")
+    logger.info(f"Searching for '{person2_name}'...")
     results2 = search_person(person2_name)
     if not results2:
-        print(f"❌ No results found for '{person2_name}'")
+        logger.error(f"❌ No results found for '{person2_name}'")
         return
     
     person2 = results2[0]
-    print(f"✓ {person2.label} ({person2.id})")
+    logger.info(f"✓ {person2.label} ({person2.id})")
     if person2.description:
-        print(f"  {person2.description}")
+        logger.info(f"  {person2.description}")
     
     # Show disambiguation options if multiple results
     if len(results2) > 1:
-        print(f"\n  Other matches found ({len(results2) - 1}):")
+        logger.info(f"\n  Other matches found ({len(results2) - 1}):")
         for i, result in enumerate(results2[1:4], 2):
-            print(f"    {i}. {result.label} - {result.description}")
-    print()
+            logger.info(f"    {i}. {result.label} - {result.description}")
+    logger.info("")
     
     # Analyze rivalry
-    print("Analyzing rivalry...\n")
+    logger.info("Analyzing rivalry...\n")
     
     try:
         analysis = analyze_rivalry(person1.id, person2.id)
         
-        print("=" * 70)
-        print("RIVALRY ANALYSIS")
-        print("=" * 70)
-        print(f"\n{analysis.entity1.label} vs {analysis.entity2.label}")
-        print(f"Rivalry: {'YES' if analysis.rivalry_exists else 'NO'}")
-        print(f"Score: {analysis.rivalry_score:.2f}/1.00")
+        logger.info("=" * 70)
+        logger.info("RIVALRY ANALYSIS")
+        logger.info("=" * 70)
+        logger.info(f"\n{analysis.entity1.label} vs {analysis.entity2.label}")
+        logger.info(f"Rivalry: {'YES' if analysis.rivalry_exists else 'NO'}")
+        logger.info(f"Score: {analysis.rivalry_score:.2f}/1.00")
         
         if analysis.rivalry_period_start or analysis.rivalry_period_end:
             period_start = analysis.rivalry_period_start or "?"
             period_end = analysis.rivalry_period_end or "ongoing"
-            print(f"Period: {period_start} - {period_end}")
+            logger.info(f"Period: {period_start} - {period_end}")
         
-        print(f"\n📝 Summary:\n{analysis.summary}")
+        logger.info(f"\n📝 Summary:\n{analysis.summary}")
+        
+        # Show source information
+        if analysis.sources:
+            logger.info(f"\n📚 Sources ({len(analysis.sources)} total):")
+            for source_id, source in list(analysis.sources.items())[:5]:  # Show first 5
+                logger.info(f"  • {source.title}")
+                logger.info(f"    Type: {source.type}, Credibility: {source.credibility_score:.2f}")
+            if len(analysis.sources) > 5:
+                logger.info(f"  ... and {len(analysis.sources) - 5} more sources")
         
         # Show entity biographical info
-        print(f"\n👤 {analysis.entity1.label}:")
+        logger.info(f"\n👤 {analysis.entity1.label}:")
         if analysis.entity1.birth_date:
-            print(f"   Born: {analysis.entity1.birth_date}")
+            logger.info(f"   Born: {analysis.entity1.birth_date}")
         if analysis.entity1.death_date:
-            print(f"   Died: {analysis.entity1.death_date}")
+            logger.info(f"   Died: {analysis.entity1.death_date}")
         
-        print(f"\n👤 {analysis.entity2.label}:")
+        logger.info(f"\n👤 {analysis.entity2.label}:")
         if analysis.entity2.birth_date:
-            print(f"   Born: {analysis.entity2.birth_date}")
+            logger.info(f"   Born: {analysis.entity2.birth_date}")
         if analysis.entity2.death_date:
-            print(f"   Died: {analysis.entity2.death_date}")
+            logger.info(f"   Died: {analysis.entity2.death_date}")
         
         if analysis.timeline:
-            print(f"\n📅 Rivalry Timeline ({len(analysis.timeline)} events):")
+            logger.info(f"\n📅 Rivalry Timeline ({len(analysis.timeline)} events):")
             for event in analysis.timeline:
-                print(f"\n  {event.date} [{event.rivalry_relevance.upper()}]")
-                print(f"    {event.description}")
+                logger.info(f"\n  {event.date} [{event.rivalry_relevance.upper()}]")
+                logger.info(f"    {event.description}")
                 
                 # Display direct quotes if present
                 if event.direct_quotes:
                     for quote in event.direct_quotes:
-                        print(f"    💬 {quote}")
+                        logger.info(f"    💬 {quote}")
                 
-                print(f"    Entity: {event.entity_id}")
+                # Display source information
+                if event.sources:
+                    logger.info(f"    📖 Sources: {event.source_count} (Confidence: {event.confidence:.2f})")
+                
+                logger.info(f"    Entity: {event.entity_id}")
         
         if analysis.relationships:
-            print(f"\n🔗 Wikidata Relationships ({len(analysis.relationships)}):")
+            logger.info(f"\n🔗 Wikidata Relationships ({len(analysis.relationships)}):")
             for rel in analysis.relationships:
                 target = rel.target_entity_label or rel.value
-                print(f"  • {rel.property_label}: {target}")
+                logger.info(f"  • {rel.property_label}: {target}")
         
-        print("\n" + "=" * 70)
+        logger.info("\n" + "=" * 70)
         
-        # Save output to JSON file
+        # Analysis is automatically saved to data/analyses/ by the pipeline
+        logger.info(f"\n💾 Analysis automatically saved to: data/analyses/{person1.id}_{person2.id}/analysis.json")
+        
+        # Also save a copy to examples/output for convenience
         output_dir = Path(__file__).parent / "output"
         output_dir.mkdir(exist_ok=True)
         
         output_file = output_dir / f"{person1.id}_{person2.id}_rivalry_analysis.json"
         
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(analysis.model_dump(), f, indent=2, ensure_ascii=False, default=str)
+            json.dump(analysis.model_dump(mode="json"), f, indent=2, ensure_ascii=False)
         
-        print(f"\n💾 Analysis saved to: {output_file}")
+        logger.info(f"   Copy saved to: {output_file}")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        logger.error(f"❌ Error: {e}")
         raise
 
 
