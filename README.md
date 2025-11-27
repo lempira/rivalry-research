@@ -1,112 +1,25 @@
-# Rivalry Research
+# Rivalry Research Project
 
-Analyze rivalrous relationships between people using Wikidata's knowledge graph and AI.
+This project is structured as a monorepo containing both the backend logic and the frontend application for the Rivalry Research tool.
 
-## Features
+## Project Structure
 
-- Search for people on Wikidata with disambiguation
-- Extract relationships between entities using SPARQL
-- AI-powered rivalry analysis with structured output
-- Automatic source fetching and deduplication (SQLite)
-- Source credibility scoring and validation
-- Persistent analysis storage with full citation tracking
-- Support for multiple AI providers (Gemini, OpenAI, Anthropic)
+- **backend/**: Contains the Python-based research library and CLI tools. This includes the core logic for fetching data from Wikidata, analyzing rivalries using AI, and storing the results.
+- **app/**: Contains the frontend application (in development).
 
-## Installation
+## Getting Started
 
-```bash
-uv add rivalry-research
-```
+### Backend
 
-## Requirements
-
-- Python 3.13+
-- AI provider API key
-
-## Quick Start
-
-```python
-import os
-from rivalry_research import search_person, analyze_rivalry
-
-# Set API key
-os.environ["GOOGLE_API_KEY"] = "your-api-key"
-
-# Search for people
-newton = search_person("Isaac Newton")[0]
-leibniz = search_person("Gottfried Wilhelm Leibniz")[0]
-
-# Analyze rivalry
-analysis = analyze_rivalry(newton.id, leibniz.id)
-
-print(f"Rivalry exists: {analysis.rivalry_exists}")
-print(f"Score: {analysis.rivalry_score:.2f}")
-print(f"Sources: {len(analysis.sources)}")
-print(f"\n{analysis.summary}")
-
-# Timeline events with sources
-for event in analysis.timeline:
-    print(f"[{event.date}] {event.description}")
-    print(f"  Sources: {event.source_count}, Confidence: {event.confidence:.2f}")
-```
-
-## CLI Commands
-
-Monitor your File Search stores:
+Navigate to the `backend` directory to work with the Python library:
 
 ```bash
-# List all stores
-uv run rivalry-fs list-stores
-
-# List documents in stores
-uv run rivalry-fs list-docs
-
-# Check store health
-uv run rivalry-fs health-check
+cd backend
+# Follow the instructions in backend/README.md
 ```
 
-## Configuration
+### Frontend
 
-```bash
-cp env.example .env
-# Edit .env and add your GOOGLE_API_KEY
-```
+The frontend application is located in the `app` directory.
 
-Or export environment variables directly:
-
-```bash
-export GOOGLE_API_KEY="your-key"
-export RIVALRY_MODEL="google-gla:gemini-2.5-flash"  # optional, this is the default
-```
-
-## Data Storage
-
-Analyses and sources are automatically saved:
-
-```
-data/
-├── sources.db              # SQLite - deduplicated sources
-├── raw_sources/            # Original content (HTML, PDF, text)
-└── analyses/               # Analysis outputs (JSON)
-    └── Q935_Q9047/
-        └── analysis.json
-```
-
-## Examples
-
-```python
-# Newton vs Leibniz - calculus priority dispute
-analysis = analyze_rivalry("Q935", "Q9047")
-
-# Analysis auto-saved to data/analyses/Q935_Q9047/analysis.json
-```
-
-## Development
-
-```bash
-uv sync
-```
-
-## License
-
-MIT
+*(Frontend setup instructions to be added)*
