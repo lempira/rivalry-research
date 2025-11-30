@@ -56,6 +56,23 @@ class Relationship(BaseModel):
     )
 
 
+class EntityImage(BaseModel):
+    """Image for an entity from various public domain sources."""
+
+    url: str = Field(..., description="Full resolution image URL")
+    thumbnail_url: str | None = Field(None, description="Smaller thumbnail URL")
+    source: str = Field(
+        ..., description="Image source: 'commons', 'wikipedia', 'loc', 'europeana'"
+    )
+    title: str | None = Field(None, description="Image title or caption")
+    license: str = Field(
+        ..., description="License type: 'public_domain', 'cc-by-sa', 'cc-by', etc."
+    )
+    attribution: str | None = Field(
+        None, description="Required attribution text if license requires it"
+    )
+
+
 class RivalryEntity(BaseModel):
     """Entity involved in a rivalry with biographical context."""
 
@@ -68,6 +85,9 @@ class RivalryEntity(BaseModel):
         default_factory=list, description="Occupations or professions"
     )
     nationality: str | None = Field(None, description="Nationality or country")
+    images: list[EntityImage] = Field(
+        default_factory=list, description="Images from various public domain sources"
+    )
 
 
 class RivalryFact(BaseModel):

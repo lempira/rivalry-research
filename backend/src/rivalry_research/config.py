@@ -11,7 +11,10 @@ class Settings(BaseSettings):
 
     google_api_key: str
     rivalry_model: str = "google-gla:gemini-2.5-flash"
-    
+
+    # Optional API keys for image sources
+    europeana_api_key: str | None = None
+
     # Storage paths
     data_dir: Path = Path("data")
     sources_db_path: Path = Path("data/sources.db")

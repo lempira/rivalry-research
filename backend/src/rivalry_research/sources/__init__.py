@@ -1,6 +1,7 @@
 """Source fetchers for biographical content."""
 
 from .credibility import calculate_credibility_score, is_primary_source
+from .image_fetcher import fetch_all_images
 from .source_aggregator import fetch_sources_for_entity
 from .validation import (
     calculate_event_confidence,
@@ -14,6 +15,7 @@ __all__ = [
     "fetch_wikipedia_source",
     "fetch_scholar_sources",
     "fetch_sources_for_entity",
+    "fetch_all_images",
     "calculate_credibility_score",
     "is_primary_source",
     "calculate_event_confidence",

@@ -9,7 +9,7 @@ from .config import get_settings
 from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
 from .rag.file_search_client import query_store
-from .sources import fetch_sources_for_entity, validate_event_sources, compute_sources_summary
+from .sources import fetch_sources_for_entity, validate_event_sources, compute_sources_summary, fetch_all_images
 from .storage import SourceDatabase
 
 logger = logging.getLogger(__name__)
@@ -371,9 +371,15 @@ def analyze_rivalry(
     # Create RivalryEntity objects with biographical data from Wikidata
     rivalry_entity1 = create_rivalry_entity(entity1)
     rivalry_entity2 = create_rivalry_entity(entity2)
-    
+
     logger.debug(f"Entity 1 biographical data: birth={rivalry_entity1.birth_date}, death={rivalry_entity1.death_date}")
     logger.debug(f"Entity 2 biographical data: birth={rivalry_entity2.birth_date}, death={rivalry_entity2.death_date}")
+
+    # Fetch images for both entities from multiple sources
+    logger.info("Fetching images for both entities")
+    rivalry_entity1.images = fetch_all_images(entity1)
+    rivalry_entity2.images = fetch_all_images(entity2)
+    logger.info(f"Found {len(rivalry_entity1.images)} images for {entity1.label}, {len(rivalry_entity2.images)} images for {entity2.label}")
     
     # Prepare context for the AI agent
     entity1_details = format_entity_details(entity1)
@@ -482,7 +488,11 @@ Combine insights from both Wikidata and biographical documents for a comprehensi
     )
     
     analysis = result.output
-    
+
+    # Post-process: Copy images from our fetched entities to the analysis output
+    analysis.entity1.images = rivalry_entity1.images
+    analysis.entity2.images = rivalry_entity2.images
+
     # Post-process: Populate sources catalog
     analysis.sources = all_sources
     
