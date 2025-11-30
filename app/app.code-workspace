@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "name": "App",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.DS_Store": true,
+      "**/node_modules": false
+    },
+    "typescript.tsdk": "node_modules/typescript/lib"
+  }
+}
