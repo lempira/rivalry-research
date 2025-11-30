@@ -205,6 +205,9 @@ For EACH event provide:
   * How each person responded or reacted
   * Immediate and longer-term impact on their relationship
   * Any dramatic elements (public humiliation, escalation, reconciliation)
+  * INLINE CITATIONS: Embed source references using {source_id} markers directly in the text where claims are made.
+    Example: "Koch published his findings on anthrax.{scholar_f5d757f49e6b} This marked the beginning of modern bacteriology."
+    Place markers immediately after the specific claim they support, not at the end of sentences or paragraphs.
 - direct_quotes: Array of verbatim quotes WITH ATTRIBUTION
   * Format: "Person Name: 'exact quote here'"
   * PRIORITIZE: insults, criticisms, dismissive comments, challenges, defenses
