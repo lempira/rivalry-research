@@ -67,7 +67,7 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
   gsap.registerPlugin(ScrollTrigger);
 
   const initAnimations = () => {
-    console.log('GSAP Animation Initializing (Flexbox Mode)');
+    console.log('GSAP Animation Initializing (Spacer Shrink Mode)');
     
     const tl = gsap.timeline({
       scrollTrigger: {
@@ -80,6 +80,13 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
 
     // --- Header Shrink ---
     tl.to("#rivalry-header", { height: "75px", ease: "none" }, 0);
+    
+    // --- Spacer Shrink (The Fix) ---
+    // Animate the spacer height from 100vh down to something closer to the final header height
+    // plus some margin for the summary.
+    // Note: Using "height" on a spacer works, but "marginTop" on the next element is sometimes smoother.
+    // Let's stick to spacer height. 100vh -> 200px seems reasonable to pull content up.
+    tl.to("#hero-spacer", { height: "200px", ease: "none" }, 0);
 
     // --- Entity 1 (Top -> Right Side) ---
     tl.to("#entity1-container", {
@@ -93,9 +100,9 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
 
     // Adjust content wrapper for header
     tl.to("#entity1-content", {
-      paddingRight: "10px", // Padding for edge
-      gap: "10px", // Reduce gap
-      justifyContent: "flex-end", // Align to right
+      paddingRight: "10px", 
+      gap: "10px", 
+      justifyContent: "flex-end", 
       ease: "none"
     }, 0);
 
@@ -110,7 +117,7 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
     // Scale Text
     tl.to("#entity1-name", {
       fontSize: "14px",
-      flex: "0 1 auto", // Allow shrinking
+      flex: "0 1 auto", 
       whiteSpace: "nowrap",
       overflow: "hidden",
       textOverflow: "ellipsis",
@@ -131,9 +138,9 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
 
     // Adjust content wrapper for header
     tl.to("#entity2-content", {
-      paddingLeft: "10px", // Padding for edge
+      paddingLeft: "10px", 
       gap: "10px",
-      justifyContent: "flex-start", // Align to left
+      justifyContent: "flex-start", 
       ease: "none"
     }, 0);
 
