@@ -1,11 +1,32 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import RivalryCard from '../components/RivalryCard.astro';
+import { getAllRivalries } from '../lib/rivalry';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const rivalries = await getAllRivalries();
 ---
 
 <Layout>
-	<Welcome />
+  <main class="container mx-auto px-4 py-8">
+    <header class="mb-12 text-center">
+      <h1 class="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl mb-4">
+        Historical Rivalries
+      </h1>
+      <p class="text-xl text-gray-600">
+        Exploring the great intellectual conflicts of history.
+      </p>
+    </header>
+
+    {rivalries.length > 0 ? (
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {rivalries.map((rivalry) => (
+          <RivalryCard rivalry={rivalry} />
+        ))}
+      </div>
+    ) : (
+      <div class="text-center py-12 text-gray-500">
+        <p>No rivalry data found. Please check your backend data source.</p>
+      </div>
+    )}
+  </main>
 </Layout>

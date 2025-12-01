@@ -10,6 +10,7 @@ from .validation import (
 )
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
+from .pdf_extractor import download_pdf, extract_text_from_pdf, fetch_pdf_content, PDFExtractionResult
 
 __all__ = [
     "fetch_wikipedia_source",
@@ -21,5 +22,9 @@ __all__ = [
     "calculate_event_confidence",
     "validate_event_sources",
     "compute_sources_summary",
+    "download_pdf",
+    "extract_text_from_pdf",
+    "fetch_pdf_content",
+    "PDFExtractionResult",
 ]
 
