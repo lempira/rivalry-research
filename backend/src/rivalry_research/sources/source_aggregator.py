@@ -18,8 +18,8 @@ def fetch_sources_for_entity(
     db: SourceDatabase,
     raw_sources_dir: Path,
     entity: WikidataEntity,
-    max_scholar_results: int = 5,
-    max_arxiv_results: int = 5,
+    max_scholar_results: int = 3,
+    max_arxiv_results: int = 3,
 ) -> list[Source]:
     """
     Fetch all available sources for an entity.
