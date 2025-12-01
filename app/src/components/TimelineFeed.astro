@@ -1,0 +1,115 @@
+---
+import type { TimelineEvent, Entity } from '../lib/types';
+
+interface Props {
+  timeline: TimelineEvent[];
+  entity1: Entity;
+  entity2: Entity;
+}
+
+const { timeline, entity1, entity2 } = Astro.props;
+
+// Sort events by date (simple string comparison for now, can be improved)
+const sortedTimeline = [...timeline].sort((a, b) => a.date.localeCompare(b.date));
+
+// Helper for icons
+const getEventIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'publication': return '📜';
+    case 'debate': return '⚔️';
+    case 'correspondence': return '✉️';
+    case 'academic_dispute': return '🎓';
+    case 'presidency_change': return '🏛️';
+    default: return '📅';
+  }
+};
+
+// Helper for alignment/color based on entity
+const getEventStyle = (eventId: string | "both") => {
+  if (eventId === entity1.id) {
+    return {
+      align: 'self-start',
+      bg: 'bg-blue-50',
+      border: 'border-blue-200',
+      text: 'text-blue-900',
+      side: 'left'
+    };
+  } else if (eventId === entity2.id) {
+    return {
+      align: 'self-end',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+      text: 'text-red-900',
+      side: 'right'
+    };
+  } else {
+    return {
+      align: 'self-center',
+      bg: 'bg-gray-50',
+      border: 'border-gray-200',
+      text: 'text-gray-900',
+      side: 'center'
+    };
+  }
+};
+---
+
+<div class="relative w-full max-w-3xl mx-auto py-12 flex flex-col gap-8">
+  <!-- Central Line (Visual only) -->
+  <div class="absolute left-4 md:left-1/2 top-0 bottom-0 w-0.5 bg-gray-200 transform -translate-x-1/2"></div>
+
+  {sortedTimeline.map((event, index) => {
+    const style = getEventStyle(event.entity_id);
+    const isBoth = event.entity_id === 'both';
+    
+    return (
+      <div class={`relative w-full flex ${isBoth ? 'justify-center' : ''}`}>
+        
+        <!-- Timeline Node (Circle on the line) -->
+        <div class="absolute left-4 md:left-1/2 w-4 h-4 rounded-full bg-white border-4 border-gray-300 transform -translate-x-1/2 mt-6 z-10"></div>
+
+        <!-- Event Card Container -->
+        <div class={`
+          w-full md:w-[45%] pl-12 md:pl-0 
+          ${style.align === 'self-start' ? 'md:mr-auto md:pr-8' : ''}
+          ${style.align === 'self-end' ? 'md:ml-auto md:pl-8' : ''}
+          ${isBoth ? 'md:w-[80%]' : ''}
+        `}>
+          
+          <div class={`p-6 rounded-lg border shadow-sm ${style.bg} ${style.border}`}>
+            <!-- Header: Year & Type -->
+            <div class="flex items-center justify-between mb-3">
+              <span class={`font-bold text-lg ${style.text}`}>{event.date}</span>
+              <span class="text-2xl" role="img" aria-label={event.event_type}>{getEventIcon(event.event_type)}</span>
+            </div>
+
+            <!-- Description -->
+            <p class="text-gray-800 leading-relaxed text-sm md:text-base">
+              {event.description}
+            </p>
+
+            <!-- Quotes -->
+            {event.direct_quotes && event.direct_quotes.length > 0 && (
+              <div class="mt-4 space-y-2">
+                {event.direct_quotes.map(quote => (
+                  <blockquote class="pl-4 border-l-4 border-gray-300 italic text-gray-600 text-sm">
+                    "{quote}"
+                  </blockquote>
+                ))}
+              </div>
+            )}
+
+            <!-- Citations (Placeholder for now) -->
+            {event.source_count > 0 && (
+               <div class="mt-3 text-xs text-gray-400 font-medium">
+                 {event.source_count} Source{event.source_count > 1 ? 's' : ''}
+               </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    );
+  })}
+</div>
+

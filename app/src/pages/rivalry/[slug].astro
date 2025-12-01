@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import RivalryHero from '../../components/RivalryHero.astro';
+import TimelineFeed from '../../components/TimelineFeed.astro';
 import { getAllRivalries, generateSlug } from '../../lib/rivalry';
 import type { RivalryData } from '../../lib/types';
 
@@ -20,7 +21,7 @@ interface Props {
 }
 
 const { rivalry } = Astro.props;
-const { entity1, entity2, rivalry_period_start, rivalry_period_end } = rivalry;
+const { entity1, entity2, rivalry_period_start, rivalry_period_end, timeline } = rivalry;
 ---
 
 <Layout>
@@ -33,32 +34,34 @@ const { entity1, entity2, rivalry_period_start, rivalry_period_end } = rivalry;
       rivalryEnd={rivalry_period_end}
     />
 
-    <!-- Content Section (Placeholder for now) -->
-    <div class="relative z-0 container mx-auto px-4 py-12 max-w-prose">
-      <div class="mb-6">
-        <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
-          &larr; Back to all rivalries
-        </a>
-      </div>
+    <!-- Content Section -->
+    <div class="relative z-0 container mx-auto px-4 py-12">
+      
+      <!-- Back Link & Summary -->
+      <div class="max-w-prose mx-auto mb-16">
+        <div class="mb-6">
+          <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            &larr; Back to all rivalries
+          </a>
+        </div>
 
-      <h2 class="text-2xl font-bold mb-4 mt-8">Summary</h2>
-      <p class="text-lg text-gray-700 leading-relaxed mb-12">
-        {rivalry.summary}
-      </p>
-
-      <div class="border-t border-gray-200 pt-8">
-        <h3 class="text-xl font-semibold mb-4">Timeline (Coming Soon)</h3>
-        <p class="text-gray-500 italic">
-          Vertical event feed will be implemented here.
+        <h2 class="text-2xl font-bold mb-4 mt-8">Summary</h2>
+        <p class="text-lg text-gray-700 leading-relaxed">
+          {rivalry.summary}
         </p>
-        
-        <!-- Debug Data (Hidden for now, can be enabled if needed) -->
-        <!-- 
-        <pre class="mt-8 text-xs overflow-auto bg-gray-50 p-4 border rounded">
-          {JSON.stringify(rivalry, null, 2)}
-        </pre> 
-        -->
       </div>
+
+      <!-- Timeline Feed -->
+      <div class="border-t border-gray-200 pt-8">
+        <h3 class="text-3xl font-bold text-center mb-8">Chronology of Conflict</h3>
+        
+        <TimelineFeed 
+          timeline={timeline}
+          entity1={entity1}
+          entity2={entity2}
+        />
+      </div>
+
     </div>
   </main>
 </Layout>
