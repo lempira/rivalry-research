@@ -4,6 +4,17 @@ import type { RivalryData } from "./types";
 
 const DATA_DIR = path.resolve("../backend/data/analyses");
 
+export function generateSlug(label1: string, label2: string): string {
+  const sanitize = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "") // Remove special chars
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .trim();
+
+  return `${sanitize(label1)}-vs-${sanitize(label2)}`;
+}
+
 export async function getAllRivalries(): Promise<RivalryData[]> {
   try {
     const entries = await fs.readdir(DATA_DIR, { withFileTypes: true });
