@@ -1,3 +1,12 @@
+export interface Image {
+  url: string;
+  thumbnail_url: string;
+  source: string;
+  title: string;
+  license: string;
+  attribution: string;
+}
+
 export interface Entity {
   id: string;
   label: string;
@@ -6,6 +15,7 @@ export interface Entity {
   death_date: string;
   occupation: string[];
   nationality: string;
+  images?: Image[];
 }
 
 export interface TimelineEvent {
@@ -33,4 +43,3 @@ export interface RivalryData {
   timeline: TimelineEvent[];
   // Include other fields as needed based on analysis.json
 }
-

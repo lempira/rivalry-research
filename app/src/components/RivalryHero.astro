@@ -12,45 +12,56 @@ const { entity1, entity2, rivalryStart, rivalryEnd } = Astro.props;
 
 // Helper to get initials for placeholder images
 const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').slice(0, 2);
+
+const entity1Image = entity1.images?.[0]?.url;
+const entity2Image = entity2.images?.[0]?.url;
 ---
 
 <!-- 1. The Fixed Header (Starts at 100vh, shrinks to 75px) -->
-<header id="rivalry-header" class="fixed top-0 left-0 w-full h-screen bg-white z-50 overflow-hidden shadow-sm border-b border-gray-200">
+<header id="rivalry-header" class="hero-header">
   
   <!-- Entity 1 (Top / Left) -->
-  <div id="entity1-container" class="absolute top-0 left-0 w-full h-1/2 flex items-center justify-center bg-gray-100 overflow-hidden">
+  <div id="entity1-container" class="entity-pane top-0 bg-gray-100">
     <!-- Flex Layout: Text Left, Image Right -->
-    <div id="entity1-content" class="w-full h-full flex items-center justify-center gap-4 px-4">
+    <div id="entity1-content" class="entity-content">
         <!-- Text -->
-        <h2 class="text-3xl font-bold text-gray-900 text-right flex-1" id="entity1-name">{entity1.label}</h2>
+        <h2 class="entity-name text-right" id="entity1-name">{entity1.label}</h2>
         <!-- Image -->
-        <div class="w-32 h-32 shrink-0 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold shadow-lg" id="entity1-img">
-            {getInitials(entity1.label)}
+        <div class="entity-avatar bg-blue-500" id="entity1-img">
+            {entity1Image ? (
+              <img src={entity1Image} alt={entity1.label} class="w-full h-full object-cover" />
+            ) : (
+              getInitials(entity1.label)
+            )}
         </div>
     </div>
   </div>
 
   <!-- Entity 2 (Bottom / Right) -->
-  <div id="entity2-container" class="absolute bottom-0 left-0 w-full h-1/2 flex items-center justify-center bg-gray-50 overflow-hidden">
+  <div id="entity2-container" class="entity-pane bottom-0 bg-gray-50">
     <!-- Flex Layout: Image Left, Text Right -->
-    <div id="entity2-content" class="w-full h-full flex items-center justify-center gap-4 px-4">
+    <div id="entity2-content" class="entity-content">
         <!-- Image -->
-        <div class="w-32 h-32 shrink-0 rounded-full bg-red-500 flex items-center justify-center text-white text-4xl font-bold shadow-lg" id="entity2-img">
-            {getInitials(entity2.label)}
+        <div class="entity-avatar bg-red-500" id="entity2-img">
+            {entity2Image ? (
+              <img src={entity2Image} alt={entity2.label} class="w-full h-full object-cover" />
+            ) : (
+              getInitials(entity2.label)
+            )}
         </div>
         <!-- Text -->
-        <h2 class="text-3xl font-bold text-gray-900 text-left flex-1" id="entity2-name">{entity2.label}</h2>
+        <h2 class="entity-name text-left" id="entity2-name">{entity2.label}</h2>
     </div>
   </div>
   
   <!-- VS Badge (Center) -->
-  <div id="vs-badge" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 bg-white rounded-full p-4 shadow-xl border-4 border-gray-100">
+  <div id="vs-badge" class="vs-badge">
     <span class="text-2xl font-black text-gray-800">VS</span>
   </div>
 
   <!-- Period (Bottom) -->
   <div id="rivalry-period" class="absolute bottom-10 left-0 w-full text-center z-30">
-    <p class="text-lg font-medium text-gray-600 bg-white/80 inline-block px-4 py-1 rounded-full backdrop-blur-sm">
+    <p class="period-badge">
       {rivalryStart} — {rivalryEnd}
     </p>
   </div>
@@ -59,6 +70,38 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
 
 <!-- 2. The Spacer -->
 <div id="hero-spacer" class="h-screen w-full relative -z-10 pointer-events-none"></div>
+
+<style>
+  @reference "../styles/global.css";
+
+  .hero-header {
+    @apply fixed top-0 left-0 w-full h-screen bg-white z-50 overflow-hidden shadow-sm border-b border-gray-200;
+  }
+
+  .entity-pane {
+    @apply absolute left-0 w-full h-1/2 flex items-center justify-center overflow-hidden;
+  }
+
+  .entity-content {
+    @apply w-full h-full flex items-center justify-center gap-4 px-4;
+  }
+
+  .entity-name {
+    @apply text-3xl font-bold text-gray-900 flex-1;
+  }
+
+  .entity-avatar {
+    @apply w-32 h-32 shrink-0 flex items-center justify-center text-white text-4xl font-bold shadow-lg overflow-hidden;
+  }
+
+  .vs-badge {
+    @apply absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 bg-white rounded-full p-4 shadow-xl border-4 border-gray-100;
+  }
+
+  .period-badge {
+    @apply text-lg font-medium text-gray-600 bg-white/80 inline-block px-4 py-1 rounded-full backdrop-blur-sm;
+  }
+</style>
 
 <script>
   import { gsap } from "gsap";
