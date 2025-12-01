@@ -1,0 +1,22 @@
+---
+import type { RivalryData } from '../lib/types';
+import { generateSlug } from '../lib/rivalry';
+
+interface Props {
+  rivalry: RivalryData;
+}
+
+const { rivalry } = Astro.props;
+const { entity1, entity2, rivalry_period_start, rivalry_period_end } = rivalry;
+
+const href = `/rivalry/${generateSlug(entity1.label, entity2.label)}`;
+---
+
+<a href={href} class="block p-6 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-white text-gray-900 no-underline hover:bg-gray-50">
+  <h2 class="text-xl font-bold mb-2">
+    {entity1.label} <span class="text-gray-400 mx-1">vs</span> {entity2.label}
+  </h2>
+  <div class="text-sm text-gray-600">
+    <span class="font-medium">Period:</span> {rivalry_period_start} – {rivalry_period_end}
+  </div>
+</a>

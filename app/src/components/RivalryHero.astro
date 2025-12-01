@@ -1,0 +1,182 @@
+---
+import type { Entity } from '../lib/types';
+
+interface Props {
+  entity1: Entity;
+  entity2: Entity;
+  rivalryStart: string;
+  rivalryEnd: string;
+}
+
+const { entity1, entity2, rivalryStart, rivalryEnd } = Astro.props;
+
+// Helper to get initials for placeholder images
+const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').slice(0, 2);
+---
+
+<div id="hero-wrapper" class="relative h-[200vh]">
+  <!-- Sticky Container -->
+  <div id="hero-sticky" class="sticky top-0 h-screen w-full overflow-hidden bg-white">
+    
+    <!-- Background Header Bar (Initially hidden/transparent) -->
+    <div id="header-bg" class="absolute top-0 left-0 w-full h-[75px] bg-white shadow-md opacity-0 z-10 border-b border-gray-200"></div>
+
+    <!-- Entity 1 (Top) -->
+    <div id="entity1-container" class="absolute top-0 left-0 w-full h-1/2 flex flex-col items-center justify-center bg-gray-100 z-20 overflow-hidden">
+      <div id="entity1-content" class="flex flex-col items-center">
+        <!-- Placeholder Image -->
+        <div class="w-32 h-32 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold mb-4 shadow-lg" id="entity1-img">
+          {getInitials(entity1.label)}
+        </div>
+        <h2 class="text-3xl font-bold text-gray-900" id="entity1-name">{entity1.label}</h2>
+      </div>
+    </div>
+
+    <!-- Entity 2 (Bottom) -->
+    <div id="entity2-container" class="absolute bottom-0 left-0 w-full h-1/2 flex flex-col items-center justify-center bg-gray-50 z-20 overflow-hidden">
+      <div id="entity2-content" class="flex flex-col items-center">
+        <!-- Placeholder Image -->
+        <div class="w-32 h-32 rounded-full bg-red-500 flex items-center justify-center text-white text-4xl font-bold mb-4 shadow-lg" id="entity2-img">
+          {getInitials(entity2.label)}
+        </div>
+        <h2 class="text-3xl font-bold text-gray-900" id="entity2-name">{entity2.label}</h2>
+      </div>
+    </div>
+    
+    <!-- VS Text (Center) -->
+    <div id="vs-badge" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 bg-white rounded-full p-4 shadow-xl border-4 border-gray-100">
+      <span class="text-2xl font-black text-gray-800">VS</span>
+    </div>
+
+    <!-- Period (Initially visible, fades out) -->
+    <div id="rivalry-period" class="absolute bottom-10 left-0 w-full text-center z-30">
+      <p class="text-lg font-medium text-gray-600 bg-white/80 inline-block px-4 py-1 rounded-full backdrop-blur-sm">
+        {rivalryStart} — {rivalryEnd}
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  import { gsap } from "gsap";
+  import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+  gsap.registerPlugin(ScrollTrigger);
+
+  const initAnimations = () => {
+    console.log('GSAP Animation Initializing (Universal Mode)');
+    
+    // Using matchMedia only for cleanup support, but setting query to "all" 
+    // or very wide range to ensure it runs on your dev machine regardless of width.
+    const mm = gsap.matchMedia();
+
+    // Run on all screens for now so you can verify logic
+    mm.add("(min-width: 0px)", () => {
+      
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: "#hero-wrapper",
+          start: "top top",
+          end: "+=100%", // Scroll over 100vh distance
+          scrub: 1, // Smooth scrubbing
+          pin: "#hero-sticky", // Pin the container
+        }
+      });
+
+      // 1. Move containers to top header position
+      tl.to("#entity1-container", {
+        height: "75px",
+        backgroundColor: "transparent",
+        ease: "power1.inOut"
+      }, 0);
+
+      tl.to("#entity2-container", {
+        top: 0,
+        height: "75px",
+        bottom: "auto",
+        backgroundColor: "transparent",
+        ease: "power1.inOut"
+      }, 0);
+
+      // 2. Animate Images to be small avatars in header
+      tl.to("#entity1-img", {
+        width: "40px",
+        height: "40px",
+        marginBottom: 0,
+        fontSize: "14px",
+        x: -60, 
+        y: 0,
+        ease: "power1.inOut"
+      }, 0);
+
+      tl.to("#entity2-img", {
+        width: "40px",
+        height: "40px",
+        marginBottom: 0,
+        fontSize: "14px",
+        x: 60,
+        y: 0,
+        ease: "power1.inOut"
+      }, 0);
+
+      // 3. Hide Names
+      tl.to("#entity1-name", {
+        opacity: 0,
+        scale: 0.5,
+        height: 0,
+        margin: 0,
+        ease: "power1.inOut"
+      }, 0);
+
+      tl.to("#entity2-name", {
+        opacity: 0,
+        scale: 0.5,
+        height: 0,
+        margin: 0,
+        ease: "power1.inOut"
+      }, 0);
+      
+      // 4. Transform VS Badge
+      tl.to("#vs-badge", {
+        scale: 0.5,
+        borderWidth: "2px",
+        padding: "4px",
+        ease: "power1.inOut"
+      }, 0);
+
+      // 5. Fade out period
+      tl.to("#rivalry-period", {
+        opacity: 0,
+        y: 20,
+        ease: "power1.inOut"
+      }, 0);
+
+      // 6. Show Header Background
+      tl.to("#header-bg", {
+        opacity: 1,
+        ease: "power1.inOut"
+      }, 0);
+
+      // Adjust content layout for header mode
+      tl.to("#entity1-content", {
+          flexDirection: 'row',
+          justifyContent: 'center',
+          height: '100%',
+          ease: "power1.inOut"
+      }, 0);
+       tl.to("#entity2-content", {
+          flexDirection: 'row',
+          justifyContent: 'center',
+          height: '100%',
+          ease: "power1.inOut"
+      }, 0);
+    });
+  };
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initAnimations();
+  } else {
+    document.addEventListener('DOMContentLoaded', initAnimations);
+  }
+</script>
