@@ -8,6 +8,7 @@ from ..models import WikidataEntity, Source
 from ..storage import SourceDatabase
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
+from .arxiv_fetcher import fetch_arxiv_sources
 from .utils import get_content_path
 
 logger = logging.getLogger(__name__)
@@ -18,26 +19,29 @@ def fetch_sources_for_entity(
     raw_sources_dir: Path,
     entity: WikidataEntity,
     max_scholar_results: int = 5,
+    max_arxiv_results: int = 5,
 ) -> list[Source]:
     """
     Fetch all available sources for an entity.
 
-    Currently fetches from:
-    - Wikipedia
-    - Google Scholar
+    Fetches from:
+    - Wikipedia (full text)
+    - Google Scholar (full text PDFs only)
+    - arXiv (full text PDFs)
 
     Args:
         db: SourceDatabase instance for deduplication
         raw_sources_dir: Directory to store raw source content
         entity: WikidataEntity to fetch sources for
         max_scholar_results: Maximum number of Scholar papers to fetch (default: 5)
+        max_arxiv_results: Maximum number of arXiv papers to fetch (default: 5)
 
     Returns:
         List of Source objects (deduplicated)
     """
     raw_sources_dir = Path(raw_sources_dir)
     raw_sources_dir.mkdir(parents=True, exist_ok=True)
-    
+
     sources = []
 
     # Fetch Wikipedia
@@ -49,7 +53,7 @@ def fetch_sources_for_entity(
         except Exception as e:
             logger.error(f"Failed to fetch Wikipedia for {entity.label}: {e}")
 
-    # Fetch Google Scholar
+    # Fetch Google Scholar (full text PDFs only)
     try:
         scholar_sources = _fetch_and_store_scholar(
             db, raw_sources_dir, entity, max_scholar_results
@@ -57,6 +61,15 @@ def fetch_sources_for_entity(
         sources.extend(scholar_sources)
     except Exception as e:
         logger.error(f"Failed to fetch Scholar for {entity.label}: {e}")
+
+    # Fetch arXiv
+    try:
+        arxiv_sources = _fetch_and_store_arxiv(
+            db, raw_sources_dir, entity, max_arxiv_results
+        )
+        sources.extend(arxiv_sources)
+    except Exception as e:
+        logger.error(f"Failed to fetch arXiv for {entity.label}: {e}")
 
     logger.info(f"Fetched {len(sources)} sources for {entity.label}")
     return sources
@@ -149,6 +162,55 @@ def _fetch_and_store_scholar(
         stored_sources.append(source)
 
         logger.info(f"Stored Scholar source: {source.source_id} - {source.title}")
+
+    return stored_sources
+
+
+def _fetch_and_store_arxiv(
+    db: SourceDatabase,
+    raw_sources_dir: Path,
+    entity: WikidataEntity,
+    max_results: int = 5,
+) -> list[Source]:
+    """
+    Fetch arXiv sources with deduplication and storage.
+
+    Args:
+        db: SourceDatabase instance
+        raw_sources_dir: Directory to store raw source content
+        entity: WikidataEntity to search for
+        max_results: Maximum number of papers to fetch
+
+    Returns:
+        List of Source objects
+    """
+    arxiv_results = fetch_arxiv_sources(entity, max_results)
+    stored_sources = []
+
+    for source, content in arxiv_results:
+        # Check if URL already exists in database
+        existing = db.get_source_by_url(source.url)
+        if existing:
+            logger.info(f"arXiv source already exists: {existing.source_id}")
+            stored_sources.append(existing)
+            continue
+
+        # Calculate content hash
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        source.content_hash = content_hash
+
+        # Save raw content to disk
+        content_path = get_content_path(raw_sources_dir, source.url, "txt")
+        content_path.write_text(content, encoding="utf-8")
+        source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
+
+        logger.debug(f"Saved arXiv content to {content_path}")
+
+        # Add to database
+        source = db.add_source(source)
+        stored_sources.append(source)
+
+        logger.info(f"Stored arXiv source: {source.source_id} - {source.title}")
 
     return stored_sources
 
