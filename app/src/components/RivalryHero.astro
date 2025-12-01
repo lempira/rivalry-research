@@ -19,32 +19,36 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
   
   <!-- Entity 1 (Top / Left) -->
   <div id="entity1-container" class="absolute top-0 left-0 w-full h-1/2 flex items-center justify-center bg-gray-100 overflow-hidden">
-    <div id="entity1-content" class="flex flex-col items-center">
-      <!-- Image -->
-      <div class="w-32 h-32 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold mb-4 shadow-lg" id="entity1-img">
-        {getInitials(entity1.label)}
-      </div>
-      <h2 class="text-3xl font-bold text-gray-900 text-center px-4" id="entity1-name">{entity1.label}</h2>
+    <!-- Flex Layout: Text Left, Image Right -->
+    <div id="entity1-content" class="w-full h-full flex items-center justify-center gap-4 px-4">
+        <!-- Text -->
+        <h2 class="text-3xl font-bold text-gray-900 text-right flex-1" id="entity1-name">{entity1.label}</h2>
+        <!-- Image -->
+        <div class="w-32 h-32 shrink-0 rounded-full bg-blue-500 flex items-center justify-center text-white text-4xl font-bold shadow-lg" id="entity1-img">
+            {getInitials(entity1.label)}
+        </div>
     </div>
   </div>
 
   <!-- Entity 2 (Bottom / Right) -->
   <div id="entity2-container" class="absolute bottom-0 left-0 w-full h-1/2 flex items-center justify-center bg-gray-50 overflow-hidden">
-    <div id="entity2-content" class="flex flex-col items-center">
-      <!-- Image -->
-      <div class="w-32 h-32 rounded-full bg-red-500 flex items-center justify-center text-white text-4xl font-bold mb-4 shadow-lg" id="entity2-img">
-        {getInitials(entity2.label)}
-      </div>
-      <h2 class="text-3xl font-bold text-gray-900 text-center px-4" id="entity2-name">{entity2.label}</h2>
+    <!-- Flex Layout: Image Left, Text Right -->
+    <div id="entity2-content" class="w-full h-full flex items-center justify-center gap-4 px-4">
+        <!-- Image -->
+        <div class="w-32 h-32 shrink-0 rounded-full bg-red-500 flex items-center justify-center text-white text-4xl font-bold shadow-lg" id="entity2-img">
+            {getInitials(entity2.label)}
+        </div>
+        <!-- Text -->
+        <h2 class="text-3xl font-bold text-gray-900 text-left flex-1" id="entity2-name">{entity2.label}</h2>
     </div>
   </div>
   
-  <!-- VS Badge (Center - disappears on scroll) -->
+  <!-- VS Badge (Center) -->
   <div id="vs-badge" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 bg-white rounded-full p-4 shadow-xl border-4 border-gray-100">
     <span class="text-2xl font-black text-gray-800">VS</span>
   </div>
 
-  <!-- Period (Bottom - disappears on scroll) -->
+  <!-- Period (Bottom) -->
   <div id="rivalry-period" class="absolute bottom-10 left-0 w-full text-center z-30">
     <p class="text-lg font-medium text-gray-600 bg-white/80 inline-block px-4 py-1 rounded-full backdrop-blur-sm">
       {rivalryStart} — {rivalryEnd}
@@ -53,7 +57,7 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
 
 </header>
 
-<!-- 2. The Spacer (Pushes content down by 100vh initially so it starts below the full header) -->
+<!-- 2. The Spacer -->
 <div id="hero-spacer" class="h-screen w-full relative -z-10 pointer-events-none"></div>
 
 <script>
@@ -63,115 +67,98 @@ const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').sl
   gsap.registerPlugin(ScrollTrigger);
 
   const initAnimations = () => {
-    console.log('GSAP Animation Initializing (Fixed Header Mode)');
-    
-    // We remove matchMedia logic for now to ensure it runs universally as requested.
-    // In a real app, you might want distinct mobile/desktop logic.
+    console.log('GSAP Animation Initializing (Flexbox Mode)');
     
     const tl = gsap.timeline({
       scrollTrigger: {
-        trigger: "body", // Watch the whole body scroll
+        trigger: "body",
         start: "top top", 
-        end: "100vh top", // Animate over the first viewport height of scrolling
-        scrub: 0.5, // Smooth scrubbing
-        // markers: true // DEBUG
+        end: "100vh top",
+        scrub: 0.5,
       }
     });
 
     // --- Header Shrink ---
-    tl.to("#rivalry-header", {
-      height: "75px",
-      ease: "none"
-    }, 0);
+    tl.to("#rivalry-header", { height: "75px", ease: "none" }, 0);
 
-    // --- Entity 1 (Top -> Left) ---
-    // Move from h-1/2 to full height of the small header
-    // Move content to flex-row for compact view
+    // --- Entity 1 (Top -> Right Side) ---
     tl.to("#entity1-container", {
-      height: "100%", // Take full height of the 75px header
-      width: "50%", // Take left half
-      backgroundColor: "transparent", // Remove background distinction
-      ease: "none"
-    }, 0);
-    
-    tl.to("#entity1-content", {
-        flexDirection: "row", // Horizontal layout
-        ease: "none"
-    }, 0);
-
-    tl.to("#entity1-img", {
-      width: "40px",
-      height: "40px",
-      fontSize: "14px",
-      marginBottom: 0,
-      marginRight: "10px", // Add space between img and text
-      ease: "none"
-    }, 0);
-
-    // Fade out name? Or keep it small? User asked to keep names.
-    // Let's keep names but make them smaller and ensure they fit.
-    tl.to("#entity1-name", {
-      fontSize: "14px", // Smaller text
-      textAlign: "left",
-      padding: 0,
-      ease: "none"
-    }, 0);
-
-
-    // --- Entity 2 (Bottom -> Right) ---
-    tl.to("#entity2-container", {
-      top: 0, // Move to top
-      bottom: "auto",
-      height: "100%", // Full height of 75px header
-      width: "50%", // Take right half
-      left: "50%", // Position on right
+      height: "100%",
+      width: "50%",
+      left: "50%", 
+      top: 0,
       backgroundColor: "transparent",
       ease: "none"
     }, 0);
 
-    tl.to("#entity2-content", {
-        flexDirection: "row-reverse", // Image on right, text on left? Or standard row?
-        // Let's do standard row for consistency: [Img] [Name]
-        // But since it's on the right side, maybe [Name] [Img] looks better?
-        // Let's stick to [Img] [Name] for now.
-        flexDirection: "row",
-        ease: "none"
+    // Adjust content wrapper for header
+    tl.to("#entity1-content", {
+      paddingRight: "10px", // Padding for edge
+      gap: "10px", // Reduce gap
+      justifyContent: "flex-end", // Align to right
+      ease: "none"
     }, 0);
 
+    // Scale Image
+    tl.to("#entity1-img", {
+      width: "40px",
+      height: "40px",
+      fontSize: "14px",
+      ease: "none"
+    }, 0);
+
+    // Scale Text
+    tl.to("#entity1-name", {
+      fontSize: "14px",
+      flex: "0 1 auto", // Allow shrinking
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      ease: "none"
+    }, 0);
+
+
+    // --- Entity 2 (Bottom -> Left Side) ---
+    tl.to("#entity2-container", {
+      height: "100%",
+      width: "50%",
+      left: 0,
+      top: 0,
+      bottom: "auto",
+      backgroundColor: "transparent",
+      ease: "none"
+    }, 0);
+
+    // Adjust content wrapper for header
+    tl.to("#entity2-content", {
+      paddingLeft: "10px", // Padding for edge
+      gap: "10px",
+      justifyContent: "flex-start", // Align to left
+      ease: "none"
+    }, 0);
+
+    // Scale Image
     tl.to("#entity2-img", {
       width: "40px",
       height: "40px",
       fontSize: "14px",
-      marginBottom: 0,
-      marginRight: "10px",
       ease: "none"
     }, 0);
 
+    // Scale Text
     tl.to("#entity2-name", {
       fontSize: "14px",
-      textAlign: "left",
-      padding: 0,
+      flex: "0 1 auto",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
       ease: "none"
     }, 0);
 
 
-    // --- Elements to Hide ---
-    
-    // VS Badge: Shrink and vanish
-    tl.to("#vs-badge", {
-      scale: 0,
-      opacity: 0,
-      display: "none",
-      ease: "none"
-    }, 0);
-
-    // Period: Fade out and move down
-    tl.to("#rivalry-period", {
-      opacity: 0,
-      y: 50,
-      display: "none",
-      ease: "none"
-    }, 0);
+    // --- Hide Elements ---
+    tl.to("#vs-badge", { scale: 0, opacity: 0, display: "none", ease: "none" }, 0);
+    tl.to("#rivalry-period", { opacity: 0, y: 50, display: "none", ease: "none" }, 0);
   };
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
