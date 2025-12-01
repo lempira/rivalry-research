@@ -10,11 +10,13 @@ from .validation import (
 )
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
+from .arxiv_fetcher import fetch_arxiv_sources
 from .pdf_extractor import download_pdf, extract_text_from_pdf, fetch_pdf_content, PDFExtractionResult
 
 __all__ = [
     "fetch_wikipedia_source",
     "fetch_scholar_sources",
+    "fetch_arxiv_sources",
     "fetch_sources_for_entity",
     "fetch_all_images",
     "calculate_credibility_score",
