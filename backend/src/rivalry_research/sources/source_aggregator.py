@@ -20,7 +20,7 @@ def fetch_sources_for_entity(
     entity: WikidataEntity,
     max_scholar_results: int = 3,
     max_arxiv_results: int = 3,
-) -> list[Source]:
+) -> list[tuple[Source, str]]:
     """
     Fetch all available sources for an entity.
 
@@ -37,49 +37,49 @@ def fetch_sources_for_entity(
         max_arxiv_results: Maximum number of arXiv papers to fetch (default: 5)
 
     Returns:
-        List of Source objects (deduplicated)
+        List of (Source, content) tuples
     """
     raw_sources_dir = Path(raw_sources_dir)
     raw_sources_dir.mkdir(parents=True, exist_ok=True)
 
-    sources = []
+    sources_with_content: list[tuple[Source, str]] = []
 
     # Fetch Wikipedia
     if entity.wikipedia_url:
         try:
-            wiki_source = _fetch_and_store_wikipedia(db, raw_sources_dir, entity)
-            if wiki_source:
-                sources.append(wiki_source)
+            wiki_result = _fetch_and_store_wikipedia(db, raw_sources_dir, entity)
+            if wiki_result:
+                sources_with_content.append(wiki_result)
         except Exception as e:
             logger.error(f"Failed to fetch Wikipedia for {entity.label}: {e}")
 
     # Fetch Google Scholar (full text PDFs only)
     try:
-        scholar_sources = _fetch_and_store_scholar(
+        scholar_results = _fetch_and_store_scholar(
             db, raw_sources_dir, entity, max_scholar_results
         )
-        sources.extend(scholar_sources)
+        sources_with_content.extend(scholar_results)
     except Exception as e:
         logger.error(f"Failed to fetch Scholar for {entity.label}: {e}")
 
     # Fetch arXiv
     try:
-        arxiv_sources = _fetch_and_store_arxiv(
+        arxiv_results = _fetch_and_store_arxiv(
             db, raw_sources_dir, entity, max_arxiv_results
         )
-        sources.extend(arxiv_sources)
+        sources_with_content.extend(arxiv_results)
     except Exception as e:
         logger.error(f"Failed to fetch arXiv for {entity.label}: {e}")
 
-    logger.info(f"Fetched {len(sources)} sources for {entity.label}")
-    return sources
+    logger.info(f"Fetched {len(sources_with_content)} sources for {entity.label}")
+    return sources_with_content
 
 
 def _fetch_and_store_wikipedia(
     db: SourceDatabase,
     raw_sources_dir: Path,
     entity: WikidataEntity,
-) -> Source | None:
+) -> tuple[Source, str] | None:
     """
     Fetch Wikipedia source with deduplication and storage.
 
@@ -89,14 +89,24 @@ def _fetch_and_store_wikipedia(
         entity: WikidataEntity with wikipedia_url
 
     Returns:
-        Source object if successful, None otherwise
+        Tuple of (Source, content) if successful, None otherwise
     """
     # Check if already in database
     existing = db.get_source_by_url(entity.wikipedia_url)
     if existing:
         logger.info(f"Wikipedia source already exists: {existing.source_id}")
-        return existing
-
+        # We need the content, so read it from disk if available
+        if existing.stored_content_path:
+            try:
+                content_path = raw_sources_dir.parent / existing.stored_content_path
+                content = content_path.read_text(encoding="utf-8")
+                return existing, content
+            except Exception as e:
+                logger.warning(f"Failed to read stored content for {existing.source_id}: {e}")
+                # Fall through to re-fetch if content missing
+        
+        # If content missing or not stored path, re-fetch
+    
     # Fetch new source
     source, content = fetch_wikipedia_source(entity)
 
@@ -114,7 +124,7 @@ def _fetch_and_store_wikipedia(
     # Add to database
     source = db.add_source(source)
 
-    return source
+    return source, content
 
 
 def _fetch_and_store_scholar(
@@ -122,7 +132,7 @@ def _fetch_and_store_scholar(
     raw_sources_dir: Path,
     entity: WikidataEntity,
     max_results: int = 5,
-) -> list[Source]:
+) -> list[tuple[Source, str]]:
     """
     Fetch Scholar sources with deduplication and storage.
 
@@ -133,17 +143,19 @@ def _fetch_and_store_scholar(
         max_results: Maximum number of papers to fetch
 
     Returns:
-        List of Source objects
+        List of (Source, content) tuples
     """
     scholar_results = fetch_scholar_sources(entity, max_results)
-    stored_sources = []
+    stored_results = []
 
     for source, content in scholar_results:
         # Check if URL already exists in database
         existing = db.get_source_by_url(source.url)
         if existing:
             logger.info(f"Scholar source already exists: {existing.source_id}")
-            stored_sources.append(existing)
+            # If exists, we use the existing source metadata but the fetched content
+            # (or we could read from disk, but we already have the content here from fetch)
+            stored_results.append((existing, content))
             continue
 
         # Calculate content hash
@@ -159,11 +171,11 @@ def _fetch_and_store_scholar(
 
         # Add to database
         source = db.add_source(source)
-        stored_sources.append(source)
+        stored_results.append((source, content))
 
         logger.info(f"Stored Scholar source: {source.source_id} - {source.title}")
 
-    return stored_sources
+    return stored_results
 
 
 def _fetch_and_store_arxiv(
@@ -171,7 +183,7 @@ def _fetch_and_store_arxiv(
     raw_sources_dir: Path,
     entity: WikidataEntity,
     max_results: int = 5,
-) -> list[Source]:
+) -> list[tuple[Source, str]]:
     """
     Fetch arXiv sources with deduplication and storage.
 
@@ -182,17 +194,17 @@ def _fetch_and_store_arxiv(
         max_results: Maximum number of papers to fetch
 
     Returns:
-        List of Source objects
+        List of (Source, content) tuples
     """
     arxiv_results = fetch_arxiv_sources(entity, max_results)
-    stored_sources = []
+    stored_results = []
 
     for source, content in arxiv_results:
         # Check if URL already exists in database
         existing = db.get_source_by_url(source.url)
         if existing:
             logger.info(f"arXiv source already exists: {existing.source_id}")
-            stored_sources.append(existing)
+            stored_results.append((existing, content))
             continue
 
         # Calculate content hash
@@ -208,9 +220,9 @@ def _fetch_and_store_arxiv(
 
         # Add to database
         source = db.add_source(source)
-        stored_sources.append(source)
+        stored_results.append((source, content))
 
         logger.info(f"Stored arXiv source: {source.source_id} - {source.title}")
 
-    return stored_sources
+    return stored_results
 

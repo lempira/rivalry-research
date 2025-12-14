@@ -9,8 +9,7 @@ from .config import get_settings
 from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
 from .rag.file_search_client import query_store
-from .sources import fetch_sources_for_entity, validate_event_sources, compute_sources_summary, fetch_all_images
-from .storage import SourceDatabase
+from .sources import validate_event_sources, compute_sources_summary, fetch_all_images
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +137,7 @@ Your task is to:
 4. Extract specific factual incidents or events with dates that demonstrate the rivalry
 5. CAPTURE THE DRAMA: Focus on direct interactions, confrontations, insults, and heated exchanges
 6. Be conservative - only mark rivalry_exists=True if there's clear evidence
+7. MANDATORY SOURCE CITATIONS: If sources are provided, you MUST include {source_id} markers in event descriptions
 
 Guidelines:
 - Focus on factual, verifiable information from Wikidata and biographical sources
@@ -205,27 +205,41 @@ For EACH event provide:
   * How each person responded or reacted
   * Immediate and longer-term impact on their relationship
   * Any dramatic elements (public humiliation, escalation, reconciliation)
-  * INLINE CITATIONS: Embed source references using {source_id} markers directly in the text where claims are made.
-    Example: "Koch published his findings on anthrax.{scholar_f5d757f49e6b} This marked the beginning of modern bacteriology."
-    Place markers immediately after the specific claim they support, not at the end of sentences or paragraphs.
+  * INLINE CITATIONS (REQUIRED): You MUST embed source references using {source_id} markers directly in the description text.
+    If sources are available and you do not include citation markers, the event is considered incomplete.
+    Example: "Koch published his findings on anthrax{wiki_koch} which directly challenged Pasteur's earlier claims{wiki_pasteur}."
+    Place markers immediately after the specific claim they support.
 - direct_quotes: Array of verbatim quotes WITH ATTRIBUTION
   * Format: "Person Name: 'exact quote here'"
   * PRIORITIZE: insults, criticisms, dismissive comments, challenges, defenses
   * Include both the attack and any response if available
 - entity_id: Use entity1.id, entity2.id, or 'both'
 - rivalry_relevance: direct/parallel/context/resolution
-- sources: Array of EventSource objects with:
+- sources (REQUIRED - separate from inline citations): Array of EventSource objects with:
   * source_id: Reference to one of the available source IDs provided in context
   * supporting_text: The specific text from the source that supports this event
   * page_reference: Page number or section (if applicable)
+  * NOTE: You MUST populate this array even when you include inline {source_id} markers in the description
 - Sort events chronologically
 
-IMPORTANT SOURCE REQUIREMENTS:
+CRITICAL - BOTH SOURCE REQUIREMENTS ARE MANDATORY:
+1. INLINE CITATIONS (PRIMARY): Every claim in the description MUST have a {source_id} marker immediately after it.
+   WITHOUT these markers, the event WILL BE REJECTED. This is the most important requirement.
+2. SOURCES ARRAY: Also populate the sources field with EventSource objects containing supporting_text.
+
+EXAMPLE OF CORRECT EVENT (you must follow this format):
+  description: "Tesla left Edison's company after a dispute over a promised $50,000 bonus{wiki_tesla123}. Edison reportedly dismissed the claim as a 'practical joke'{wiki_edison456}, which Tesla later described as emblematic of their differences."
+  sources: [
+    {"source_id": "wiki_tesla123", "supporting_text": "Tesla claimed he was promised a $50,000 bonus for redesigning generators, which Edison's manager later called a joke."},
+    {"source_id": "wiki_edison456", "supporting_text": "Edison dismissed Tesla's bonus claim as a misunderstanding of American humor."}
+  ]
+
+Notice: The SAME source_ids appear BOTH inline in the description AND in the sources array.
+
 - You will be provided with available sources (with source_ids) for both entities
-- For EACH event, reference sources using their source_id from the provided list
+- For EACH event, reference sources using their source_id in BOTH places
 - Include the specific supporting_text that evidences the event
 - An event can reference multiple sources if multiple sources confirm it
-- The sources field must use the EventSource structure, NOT plain strings
 
 Rivalry Period:
 - Specify rivalry_period_start: when the rivalry/competition began (YYYY format)
@@ -250,7 +264,12 @@ Return a structured analysis with:
 - Base all information on BOTH Wikidata and biographical document searches
 
 NOTE: The sources dictionary and sources_summary will be populated automatically from the available sources.
-You only need to reference sources by their source_id in the timeline events."""
+You only need to reference sources by their source_id in the timeline events.
+
+VALIDATION: Before returning, verify that EVERY event has:
+1. At least one {source_id} marker in the description text
+2. A non-empty sources array with at least one EventSource object
+Events missing either inline citations OR the sources array are considered incomplete."""
 
 # Get settings (loads from .env or environment)
 settings = get_settings()
@@ -311,6 +330,7 @@ def analyze_rivalry(
     relationships: list[Relationship],
     shared_properties: dict[str, Any],
     store_name: str,
+    sources: list[Source],
 ) -> RivalryAnalysis:
     """
     Analyze the rivalry between two entities using AI.
@@ -322,8 +342,7 @@ def analyze_rivalry(
     The agent queries biographical documents via File Search to enrich the analysis
     with timeline events and narrative context.
     
-    Fetches Wikipedia sources for both entities, stores them in SQLite database,
-    and passes source metadata to the agent for proper citation.
+    The provided sources are used to build the source catalog for citations.
 
     The AI model used can be configured via the RIVALRY_MODEL environment variable.
     Defaults to "google-gla:gemini-2.5-flash" if not set.
@@ -334,21 +353,13 @@ def analyze_rivalry(
         relationships: List of direct relationships between the entities
         shared_properties: Dictionary of properties both entities share
         store_name: File Search store name for biographical document access
+        sources: List of pre-fetched sources to be used in the analysis
 
     Returns:
         RivalryAnalysis with structured rivalry data including source catalog
 
     Raises:
         Exception: If the AI model fails or returns invalid data
-
-    Example:
-        >>> entity1 = get_entity("Q41421")
-        >>> entity2 = get_entity("Q134183")
-        >>> rels = get_direct_relationships("Q41421", "Q134183")
-        >>> shared = get_shared_properties("Q41421", "Q134183")
-        >>> analysis = analyze_rivalry(entity1, entity2, rels, shared, store_name="fileSearchStores/abc")
-        >>> print(analysis.rivalry_exists)
-        True
     """
     logger.info(f"Analyzing rivalry: {entity1.label} vs {entity2.label}")
     logger.debug(f"Entity 1 details: {format_entity_details(entity1)}")
@@ -356,20 +367,16 @@ def analyze_rivalry(
     logger.debug(f"Found {len(relationships)} direct relationships")
     logger.debug(f"Found {len(shared_properties)} shared properties")
     
-    # Initialize source database and fetch sources
     settings = get_settings()
-    db = SourceDatabase(settings.sources_db_path)
     
-    logger.info("Fetching Wikipedia sources for both entities")
-    sources_entity1 = fetch_sources_for_entity(db, settings.raw_sources_dir, entity1)
-    sources_entity2 = fetch_sources_for_entity(db, settings.raw_sources_dir, entity2)
+    logger.info(f"Using {len(sources)} pre-fetched sources")
     
     # Combine sources into a catalog
     all_sources: dict[str, Source] = {}
-    for source in sources_entity1 + sources_entity2:
+    for source in sources:
         all_sources[source.source_id] = source
     
-    logger.info(f"Fetched {len(all_sources)} total sources ({len(sources_entity1)} for {entity1.label}, {len(sources_entity2)} for {entity2.label})")
+    logger.info(f"Processing {len(all_sources)} total sources")
     
     # Create RivalryEntity objects with biographical data from Wikidata
     rivalry_entity1 = create_rivalry_entity(entity1)

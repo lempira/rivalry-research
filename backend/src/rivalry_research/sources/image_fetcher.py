@@ -81,8 +81,9 @@ def fetch_commons_images(
                 continue
 
             # Build Commons URL - spaces become underscores, then URL encode
+            # Use width parameter to ensure non-web formats (TIF, etc.) are converted
             encoded_filename = quote(filename.replace(" ", "_"))
-            full_url = f"https://commons.wikimedia.org/wiki/Special:FilePath/{encoded_filename}"
+            full_url = f"https://commons.wikimedia.org/wiki/Special:FilePath/{encoded_filename}?width=1200"
             thumb_url = f"https://commons.wikimedia.org/wiki/Special:FilePath/{encoded_filename}?width=300"
 
             images.append(

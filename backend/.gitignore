@@ -39,6 +39,7 @@ examples/output/*.json
 # Data directory (generated files)
 data/*
 !data/.gitkeep
+data_test/
 
 # Claude
 .claude/

@@ -22,13 +22,13 @@ const sortedTimeline = [...timeline].sort((a, b) => a.date.localeCompare(b.date)
 // So Entity 1 events should be Right Justified.
 // Entity 2 events should be Left Justified.
 const getEventStyle = (eventId: string | "both") => {
-  if (eventId === entity1.id) {
+  if (eventId === "entity1") {
     return {
       align: 'self-end',
       textAlign: 'text-right',
       containerAlign: 'items-end',
     };
-  } else if (eventId === entity2.id) {
+  } else if (eventId === "entity2") {
     return {
       align: 'self-start',
       textAlign: 'text-left',

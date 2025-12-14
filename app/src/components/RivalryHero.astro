@@ -20,6 +20,13 @@ const entity2Image = entity2.images?.[0]?.url;
 <!-- 1. The Fixed Header (Starts at 100vh, shrinks to 75px) -->
 <header id="rivalry-header" class="hero-header">
   
+  <!-- Period (Top) -->
+  <div id="rivalry-period" class="absolute top-2 left-0 w-full text-center z-30">
+    <p class="period-badge">
+      {rivalryStart} — {rivalryEnd}
+    </p>
+  </div>
+
   <!-- Entity 1 (Top / Left) -->
   <div id="entity1-container" class="entity-pane top-0 bg-gray-100">
     <!-- Flex Layout: Text Left, Image Right -->
@@ -59,13 +66,6 @@ const entity2Image = entity2.images?.[0]?.url;
     <span class="text-2xl font-black text-gray-800">VS</span>
   </div>
 
-  <!-- Period (Bottom) -->
-  <div id="rivalry-period" class="absolute bottom-10 left-0 w-full text-center z-30">
-    <p class="period-badge">
-      {rivalryStart} — {rivalryEnd}
-    </p>
-  </div>
-
 </header>
 
 <!-- 2. The Spacer -->
@@ -91,7 +91,7 @@ const entity2Image = entity2.images?.[0]?.url;
   }
 
   .entity-avatar {
-    @apply w-32 h-32 shrink-0 flex items-center justify-center text-white text-4xl font-bold shadow-lg overflow-hidden;
+    @apply w-48 h-48 shrink-0 flex items-center justify-center text-white text-4xl font-bold shadow-lg overflow-hidden;
   }
 
   .vs-badge {
@@ -99,7 +99,7 @@ const entity2Image = entity2.images?.[0]?.url;
   }
 
   .period-badge {
-    @apply text-lg font-medium text-gray-600 bg-white/80 inline-block px-4 py-1 rounded-full backdrop-blur-sm;
+    @apply text-lg font-medium text-gray-700 inline-block px-4 py-1;
   }
 </style>
 
@@ -208,7 +208,7 @@ const entity2Image = entity2.images?.[0]?.url;
 
     // --- Hide Elements ---
     tl.to("#vs-badge", { scale: 0, opacity: 0, display: "none", ease: "none" }, 0);
-    tl.to("#rivalry-period", { opacity: 0, y: 50, display: "none", ease: "none" }, 0);
+    tl.to("#rivalry-period", { opacity: 0, y: -50, display: "none", ease: "none" }, 0);
   };
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {

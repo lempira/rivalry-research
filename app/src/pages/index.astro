@@ -4,6 +4,13 @@ import RivalryCard from '../components/RivalryCard.astro';
 import { getAllRivalries } from '../lib/rivalry';
 
 const rivalries = await getAllRivalries();
+
+// Sort by start year (ascending)
+rivalries.sort((a, b) => {
+  const startA = parseInt(a.rivalry_period_start) || 0;
+  const startB = parseInt(b.rivalry_period_start) || 0;
+  return startA - startB;
+});
 ---
 
 <Layout>
@@ -12,9 +19,6 @@ const rivalries = await getAllRivalries();
       <h1 class="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl mb-4">
         Historical Rivalries
       </h1>
-      <p class="text-xl text-gray-600">
-        Exploring the great intellectual conflicts of history.
-      </p>
     </header>
 
     {rivalries.length > 0 ? (

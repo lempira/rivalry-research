@@ -9,7 +9,6 @@ from google import genai
 from google.genai import types
 
 from ..config import get_settings
-from ..models import WikidataEntity
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ def get_or_create_store() -> Any:
 
 
 def upload_document(
-    store_name: str, entity: WikidataEntity, content: str, timeout: int = 300
+    store_name: str, display_name: str, content: str, timeout: int = 300
 ) -> Any:
     """
     Upload a document to the File Search store.
@@ -83,7 +82,7 @@ def upload_document(
     
     Args:
         store_name: File Search store name (e.g., 'fileSearchStores/abc123')
-        entity: WikidataEntity with metadata
+        display_name: Display name for the file (used for citations)
         content: Document content (formatted with metadata header)
         timeout: Max wait time for import completion in seconds
     
@@ -93,25 +92,19 @@ def upload_document(
     Raises:
         Exception: If upload or import fails
         TimeoutError: If import doesn't complete within timeout
-    
-    Example:
-        >>> store = get_or_create_store()
-        >>> entity = get_entity("Q935")
-        >>> content = fetch_wikipedia_article(entity)
-        >>> operation = upload_document(store.name, entity, content)
     """
-    logger.debug(f"Uploading document for entity {entity.id}: {entity.label}")
+    logger.debug(f"Uploading document: {display_name}")
     logger.debug(f"Content size: {len(content)} characters")
     
     client = _get_client()
     
     # Create a temporary file with the content
-    temp_file = Path(f"/tmp/{entity.id}_wikipedia.txt")
+    # Use a sanitized version of display name for temp file
+    safe_name = "".join(c for c in display_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+    temp_file = Path(f"/tmp/{safe_name}.txt")
     try:
         temp_file.write_text(content, encoding="utf-8")
         
-        # Display name includes entity info for citations
-        display_name = f"{entity.label} ({entity.id}) - Wikipedia"
         logger.debug(f"Display name for citations: {display_name}")
         
         # Upload and import the file
@@ -134,7 +127,7 @@ def upload_document(
             time.sleep(5)
             operation = client.operations.get(operation)
         
-        logger.info(f"Document uploaded successfully for {entity.label}")
+        logger.info(f"Document uploaded successfully: {display_name}")
         return operation
         
     finally:

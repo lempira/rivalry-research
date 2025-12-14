@@ -10,13 +10,90 @@ const { rivalry } = Astro.props;
 const { entity1, entity2, rivalry_period_start, rivalry_period_end } = rivalry;
 
 const href = `/rivalry/${generateSlug(entity1.label, entity2.label)}`;
+const entity1Image = entity1.images?.[0]?.url;
+const entity2Image = entity2.images?.[0]?.url;
+
+const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').slice(0, 2);
+
+// Calculate Duration
+const startYear = parseInt(rivalry_period_start);
+const endYear = parseInt(rivalry_period_end);
+let durationLabel = "";
+
+if (!isNaN(startYear) && !isNaN(endYear)) {
+  const diff = endYear - startYear;
+  durationLabel = diff === 1 ? "1 Year" : `${diff} Years`;
+} else if (!isNaN(startYear) && rivalry_period_end.toLowerCase() === 'present') {
+   const currentYear = new Date().getFullYear();
+   const diff = currentYear - startYear;
+   durationLabel = `${diff} Years`;
+}
 ---
 
-<a href={href} class="block p-6 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-white text-gray-900 no-underline hover:bg-gray-50">
-  <h2 class="text-xl font-bold mb-2">
-    {entity1.label} <span class="text-gray-400 mx-1">vs</span> {entity2.label}
-  </h2>
-  <div class="text-sm text-gray-600">
-    <span class="font-medium">Period:</span> {rivalry_period_start} – {rivalry_period_end}
+<a href={href} class="rivalry-card">
+  <div class="card-content">
+    
+    <!-- Entity 1 (Avatar + Name Below) -->
+    <div class="entity-group">
+      <div class="avatar bg-blue-100 text-blue-700">
+        {entity1Image ? (
+          <img src={entity1Image} alt={entity1.label} class="w-full h-full object-cover" />
+        ) : (
+          getInitials(entity1.label)
+        )}
+      </div>
+      <span class="entity-name">{entity1.label}</span>
+    </div>
+
+    <!-- Period (Center) -->
+    <div class="period-badge">
+      <span class="text-lg font-black text-gray-800">{rivalry_period_start}</span>
+      {durationLabel && (
+        <span class="text-[0.65rem] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
+          {durationLabel}
+        </span>
+      )}
+    </div>
+
+    <!-- Entity 2 (Avatar + Name Below) -->
+    <div class="entity-group">
+      <div class="avatar bg-red-100 text-red-700">
+        {entity2Image ? (
+          <img src={entity2Image} alt={entity2.label} class="w-full h-full object-cover" />
+        ) : (
+          getInitials(entity2.label)
+        )}
+      </div>
+      <span class="entity-name">{entity2.label}</span>
+    </div>
+
   </div>
 </a>
+
+<style>
+  @reference "../styles/global.css";
+
+  .rivalry-card {
+    @apply block p-6 hover:shadow-md transition-all bg-white text-gray-900 no-underline hover:border-gray-300;
+  }
+
+  .card-content {
+    @apply flex items-start justify-between gap-4;
+  }
+
+  .entity-group {
+    @apply flex flex-col items-center gap-2 flex-1 min-w-0 text-center;
+  }
+
+  .entity-name {
+    @apply font-bold text-sm leading-tight text-wrap text-gray-700;
+  }
+
+  .avatar {
+    @apply w-24 h-24 overflow-hidden shrink-0 flex items-center justify-center text-xl font-bold border border-gray-100 shadow-sm rounded-lg;
+  }
+
+  .period-badge {
+    @apply mt-8 flex flex-col items-center justify-center shrink-0 min-w-[80px];
+  }
+</style>

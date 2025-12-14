@@ -263,8 +263,8 @@ class TimelineEvent(BaseModel):
         description="Type of event (achievement, conflict, publication, meeting, debate, etc.)",
     )
     description: str = Field(
-        ..., 
-        description="Detailed description of the event including setting, context, interactions, responses, and impact. Be specific and capture dramatic elements."
+        ...,
+        description="Detailed description of the event including setting, context, interactions, responses, and impact. REQUIRED: Include inline source citations using {source_id} markers (e.g., 'Koch challenged Pasteur{wiki_abc123}') when sources are available."
     )
     entity_id: str = Field(
         ...,
@@ -280,7 +280,7 @@ class TimelineEvent(BaseModel):
     )
     sources: list[EventSource] = Field(
         default_factory=list,
-        description="References to sources that support this event with supporting text and page references",
+        description="REQUIRED: Array of EventSource objects with source_id, supporting_text, and page_reference. Must be populated even when inline {source_id} markers are included in description.",
     )
     source_count: int = Field(
         default=0, description="Number of sources supporting this event"

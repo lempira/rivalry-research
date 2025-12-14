@@ -21,8 +21,8 @@ from .rag.file_search_client import (
 from .relationships import get_direct_relationships, get_shared_properties
 from .rivalry_agent import analyze_rivalry as analyze_rivalry_with_data
 from .search import get_person_by_id, search_person
-from .sources import fetch_wikipedia_source
-from .storage import save_analysis
+from .sources import fetch_sources_for_entity
+from .storage import save_analysis, SourceDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +60,14 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
     This high-level function orchestrates the complete workflow:
     1. Fetches both entities from Wikidata (with Wikipedia URLs)
     2. Extracts direct relationships and shared properties between them
-    3. Fetches Wikipedia sources and stores them in SQLite (automatic deduplication)
-    4. Uploads Wikipedia content to File Search store for agent tool access
-    5. Uses AI with File Search to analyze rivalry with biographical context
+    3. Fetches all sources (Wiki, Scholar, arXiv) for both entities
+    4. Uploads ALL source content to File Search store for agent tool access
+    5. Uses AI with File Search to analyze rivalry with comprehensive context
     6. Saves analysis to disk with full source catalog
 
-    The AI agent has access to both structured Wikidata facts and biographical
-    narrative from Wikipedia articles, enabling richer timeline extraction and
-    rivalry analysis. Sources are automatically deduplicated and tracked.
+    The AI agent has access to both structured Wikidata facts and the full text of
+    all collected documents (Wikipedia + academic papers), enabling deeper analysis.
+    Sources are automatically deduplicated and tracked.
 
     Args:
         entity_id1: First person's Wikidata entity ID (e.g., "Q935" for Newton)
@@ -111,35 +111,43 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
     logger.debug(f"Found {len(relationships)} direct relationships")
     logger.debug(f"Found {len(shared_props)} shared properties")
 
-    # PHASE 2: Prepare biographical documents for File Search
-    logger.info("Phase 2: Preparing biographical documents for File Search")
+    # PHASE 2: Fetch Sources & Prepare File Search
+    logger.info("Phase 2: Fetching sources and preparing File Search")
+    settings = get_settings()
     store = get_or_create_store()
+    db = SourceDatabase(settings.sources_db_path)
 
-    logger.info("Fetching Wikipedia articles for File Search")
+    # Fetch all sources for both entities
+    logger.info("Fetching comprehensive sources (Wiki, Scholar, arXiv)")
+    sources_1_tuples = fetch_sources_for_entity(db, settings.raw_sources_dir, entity1)
+    sources_2_tuples = fetch_sources_for_entity(db, settings.raw_sources_dir, entity2)
     
-    # Fetch Wikipedia sources (for content to upload to File Search)
-    # The analyze_rivalry_with_data will also fetch sources, but we need content here
-    # for File Search upload
-    if entity1.wikipedia_url:
-        source1, content1 = fetch_wikipedia_source(entity1)
-        if not check_document_exists(store.name, entity1.id):
-            logger.info(f"Uploading document for {entity1.label}")
-            upload_document(store.name, entity1, content1)
-        else:
-            logger.info(f"Document already exists for {entity1.label}")
+    all_source_tuples = sources_1_tuples + sources_2_tuples
+    all_sources_list = [t[0] for t in all_source_tuples]
     
-    if entity2.wikipedia_url:
-        source2, content2 = fetch_wikipedia_source(entity2)
-        if not check_document_exists(store.name, entity2.id):
-            logger.info(f"Uploading document for {entity2.label}")
-            upload_document(store.name, entity2, content2)
-        else:
-            logger.info(f"Document already exists for {entity2.label}")
+    logger.info(f"Collected {len(all_sources_list)} total sources")
+    
+    # Upload content to File Search
+    logger.info("Uploading source content to File Search store")
+    for source, content in all_source_tuples:
+        # Check if already uploaded (using source ID or URL hash might be better, 
+        # but here we use a simple check or just allow update)
+        # Note: check_document_exists is currently a stub that returns False
+        # We'll use the source title + ID as display name
+        display_name = f"{source.title} ({source.source_id})"
+        
+        # We trust the upload_document function to handle the upload
+        try:
+            upload_document(store.name, display_name, content)
+        except Exception as e:
+            logger.warning(f"Failed to upload {display_name} to File Search: {e}")
 
-    # PHASE 3: AI analysis with File Search (fetches sources internally)
-    logger.info("Phase 3: Running AI analysis with source fetching")
+    # PHASE 3: AI analysis with File Search
+    logger.info("Phase 3: Running AI analysis with pre-fetched sources")
     analysis = analyze_rivalry_with_data(
-        entity1, entity2, relationships, shared_props, store_name=store.name
+        entity1, entity2, relationships, shared_props, 
+        store_name=store.name,
+        sources=all_sources_list
     )
 
     logger.info(
