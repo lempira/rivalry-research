@@ -136,9 +136,32 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
         # We'll use the source title + ID as display name
         display_name = f"{source.title} ({source.source_id})"
         
-        # We trust the upload_document function to handle the upload
+        # Build custom metadata from source attributes
+        custom_metadata = {
+            "source_id": source.source_id,
+            "source_type": source.type,
+            "title": source.title,
+            "url": source.url,
+        }
+        
+        # Add optional metadata fields if available
+        if source.authors:
+            custom_metadata["authors"] = ", ".join(source.authors)
+        if source.publication:
+            custom_metadata["publication"] = source.publication
+        if source.publication_date:
+            custom_metadata["publication_date"] = source.publication_date
+        if source.doi:
+            custom_metadata["doi"] = source.doi
+        
+        # Upload with metadata
         try:
-            upload_document(store.name, display_name, content)
+            upload_document(
+                store.name,
+                display_name,
+                content,
+                custom_metadata=custom_metadata,
+            )
         except Exception as e:
             logger.warning(f"Failed to upload {display_name} to File Search: {e}")
 

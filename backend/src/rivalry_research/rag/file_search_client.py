@@ -72,18 +72,25 @@ def get_or_create_store() -> Any:
 
 
 def upload_document(
-    store_name: str, display_name: str, content: str, timeout: int = 300
+    store_name: str,
+    display_name: str,
+    content: str,
+    custom_metadata: dict[str, str] | None = None,
+    chunking_config: dict[str, Any] | None = None,
+    timeout: int = 300,
 ) -> Any:
     """
-    Upload a document to the File Search store.
+    Upload a document to the File Search store with custom metadata and chunking config.
     
-    The document is uploaded with metadata in the display_name for citations.
-    According to File Search docs, the display_name will be visible in citations.
+    The document is uploaded with metadata in the display_name for citations,
+    plus optional custom metadata and chunking configuration.
     
     Args:
         store_name: File Search store name (e.g., 'fileSearchStores/abc123')
         display_name: Display name for the file (used for citations)
-        content: Document content (formatted with metadata header)
+        content: Document content
+        custom_metadata: Optional dict of metadata key-value pairs to attach to document
+        chunking_config: Optional chunking configuration. If None, API uses its own defaults.
         timeout: Max wait time for import completion in seconds
     
     Returns:
@@ -92,11 +99,38 @@ def upload_document(
     Raises:
         Exception: If upload or import fails
         TimeoutError: If import doesn't complete within timeout
+    
+    Example:
+        >>> metadata = {
+        ...     "source_id": "fc9a0e1e51ac",
+        ...     "source_type": "wikipedia",
+        ...     "url": "https://en.wikipedia.org/wiki/Isaac_Newton"
+        ... }
+        >>> upload_document(store.name, "Isaac Newton", content, custom_metadata=metadata)
     """
     logger.debug(f"Uploading document: {display_name}")
     logger.debug(f"Content size: {len(content)} characters")
     
     client = _get_client()
+    
+    # Build config for upload
+    config: dict[str, Any] = {"display_name": display_name}
+    
+    # Add custom metadata if provided
+    if custom_metadata:
+        # Format metadata as list of key-value objects for API
+        metadata_list = []
+        for key, value in custom_metadata.items():
+            # Determine if value should be string or numeric
+            metadata_list.append({"key": key, "string_value": str(value)})
+        config["custom_metadata"] = metadata_list
+        logger.debug(f"Including {len(metadata_list)} metadata fields")
+    
+    # Add chunking config if explicitly provided
+    # Otherwise, let the API use its own defaults
+    if chunking_config:
+        config["chunking_config"] = chunking_config
+        logger.debug(f"Using custom chunking config: {chunking_config}")
     
     # Create a temporary file with the content
     # Use a sanitized version of display name for temp file
@@ -105,14 +139,12 @@ def upload_document(
     try:
         temp_file.write_text(content, encoding="utf-8")
         
-        logger.debug(f"Display name for citations: {display_name}")
-        
         # Upload and import the file
         logger.debug(f"Starting upload to store: {store_name}")
         operation = client.file_search_stores.upload_to_file_search_store(
             file=str(temp_file),
             file_search_store_name=store_name,
-            config={"display_name": display_name},
+            config=config,
         )
         
         # Wait for import to complete
