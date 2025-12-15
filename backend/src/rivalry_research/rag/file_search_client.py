@@ -211,6 +211,123 @@ def query_store(
         raise Exception(f"Failed to query File Search store: {e}") from e
 
 
+def retrieve_relevant_documents(
+    store_name: str,
+    query: str,
+    model: str = DEFAULT_RAG_MODEL,
+) -> list[dict[str, Any]]:
+    """
+    Retrieve relevant document chunks with metadata WITHOUT synthesis.
+    
+    This queries the File Search store and extracts the actual document chunks
+    that were found relevant, along with their metadata (source info, references).
+    Unlike query_store, this returns the raw chunks rather than a synthesized answer.
+    
+    Args:
+        store_name: File Search store name
+        query: Natural language query
+        model: Model to use (default: gemini-2.5-flash)
+    
+    Returns:
+        List of dicts containing:
+            - content: The actual text chunk
+            - title: Full title from display_name (e.g., "Paul_Gauguin (wiki_fc9a0e1e51ac)")
+            - entity: Parsed entity name (e.g., "Paul_Gauguin")
+            - source_type: Parsed source type (e.g., "wiki", "scholar")
+            - source_id: Parsed source ID/hash
+            - reference_count: Number of times chunk was referenced in grounding_supports
+    
+    Raises:
+        Exception: If query fails
+    
+    Example:
+        >>> store = get_or_create_store()
+        >>> docs = retrieve_relevant_documents(
+        ...     store.name,
+        ...     "What were the key events in Newton's life?"
+        ... )
+        >>> for doc in docs:
+        ...     print(f"Source: {doc['entity']} ({doc['source_type']})")
+        ...     print(f"Content: {doc['content'][:100]}...")
+        ...     print(f"Referenced {doc['reference_count']} times")
+    """
+    client = _get_client()
+    
+    try:
+        # Query with File Search tool
+        response = client.models.generate_content(
+            model=model,
+            contents=query,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(file_search=types.FileSearch(
+                    file_search_store_names=[store_name]
+                ))]
+            ),
+        )
+        
+        documents = []
+        
+        # Extract grounding metadata which contains the actual chunks used
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            
+            if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                grounding = candidate.grounding_metadata
+                
+                # Count references for each chunk from grounding_supports
+                chunk_reference_counts = {}
+                if hasattr(grounding, 'grounding_supports') and grounding.grounding_supports:
+                    for support in grounding.grounding_supports:
+                        if hasattr(support, 'grounding_chunk_indices'):
+                            for idx in support.grounding_chunk_indices:
+                                chunk_reference_counts[idx] = chunk_reference_counts.get(idx, 0) + 1
+                
+                # Extract chunks with metadata
+                if hasattr(grounding, 'grounding_chunks') and grounding.grounding_chunks:
+                    for idx, chunk in enumerate(grounding.grounding_chunks):
+                        if hasattr(chunk, 'retrieved_context'):
+                            context = chunk.retrieved_context
+                            
+                            # Extract text and title
+                            content = getattr(context, 'text', '')
+                            title = getattr(context, 'title', '')
+                            
+                            # Parse title to extract metadata
+                            # Format: "Entity_Name (source_type_hash)" or "Entity Name (source_type_hash)"
+                            entity = title
+                            source_type = ''
+                            source_id = ''
+                            
+                            if '(' in title and ')' in title:
+                                # Split on last occurrence of '('
+                                parts = title.rsplit('(', 1)
+                                entity = parts[0].strip()
+                                
+                                # Extract source_type and source_id from parentheses
+                                metadata_part = parts[1].rstrip(')').strip()
+                                # Format: "wiki_fc9a0e1e51ac" or "scholar_e35caa0fcec5"
+                                if '_' in metadata_part:
+                                    source_parts = metadata_part.split('_', 1)
+                                    source_type = source_parts[0]
+                                    source_id = source_parts[1] if len(source_parts) > 1 else ''
+                            
+                            doc = {
+                                'content': content,
+                                'title': title,
+                                'entity': entity,
+                                'source_type': source_type,
+                                'source_id': source_id,
+                                'reference_count': chunk_reference_counts.get(idx, 0),
+                            }
+                            documents.append(doc)
+        
+        logger.debug(f"Retrieved {len(documents)} document chunks for query")
+        return documents
+        
+    except Exception as e:
+        raise Exception(f"Failed to retrieve documents: {e}") from e
+
+
 def delete_store(store_name: str) -> None:
     """
     Delete a File Search store and all its documents.

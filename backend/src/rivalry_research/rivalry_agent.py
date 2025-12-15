@@ -8,7 +8,7 @@ from pydantic_ai import Agent, RunContext, InstrumentationSettings
 from .config import get_settings
 from .logging_utils import format_entity_details, log_tool_usage
 from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
-from .rag.file_search_client import query_store
+from .rag.file_search_client import retrieve_relevant_documents
 from .sources import validate_event_sources, compute_sources_summary, fetch_all_images
 
 logger = logging.getLogger(__name__)
@@ -294,7 +294,8 @@ def search_biographical_documents(ctx: RunContext[str], query: str) -> str:
     """
     Search biographical documents for information about the people being analyzed.
     
-    Use this tool to query biographical documents stored in the File Search store.
+    Use this tool to retrieve relevant document chunks from the File Search store.
+    Each chunk includes the source metadata and reference information.
     You can make multiple queries to gather comprehensive information.
     
     Args:
@@ -302,22 +303,31 @@ def search_biographical_documents(ctx: RunContext[str], query: str) -> str:
         query: Natural language search query about the people
     
     Returns:
-        Search results from biographical documents
+        Formatted document chunks with source metadata
     """
     store_name = ctx.deps
     logger.debug(f"Tool 'search_biographical_documents' called with query: {query}")
     
     try:
-        response = query_store(store_name, query)
-        result_text = response.text
+        documents = retrieve_relevant_documents(store_name, query)
         
-        # Add grounding metadata if available
-        if hasattr(response, 'candidates') and response.candidates:
-            grounding = response.candidates[0].grounding_metadata
-            if grounding:
-                logger.debug(f"Results include grounding from {len(grounding.grounding_chunks or [])} chunks")
+        if not documents:
+            return "No relevant documents found for this query."
         
-        logger.debug(f"Tool returned {len(result_text)} characters")
+        # Format documents with metadata for the agent
+        result_parts = []
+        for idx, doc in enumerate(documents, 1):
+            result_parts.append(f"--- Document {idx} ---")
+            result_parts.append(f"Source: {doc['entity']}")
+            result_parts.append(f"Type: {doc['source_type']}")
+            result_parts.append(f"Source ID: {doc['source_id']}")
+            result_parts.append(f"Referenced: {doc['reference_count']} times")
+            result_parts.append(f"\nContent:\n{doc['content']}")
+            result_parts.append("")  # Empty line between documents
+        
+        result_text = "\n".join(result_parts)
+        
+        logger.debug(f"Tool returned {len(documents)} chunks, {len(result_text)} total characters")
         return result_text
     except Exception as e:
         logger.error(f"Tool search failed: {e}")

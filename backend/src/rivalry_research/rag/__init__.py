@@ -5,6 +5,7 @@ from .file_search_client import (
     upload_document,
     check_document_exists,
     query_store,
+    retrieve_relevant_documents,
 )
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "upload_document",
     "check_document_exists",
     "query_store",
+    "retrieve_relevant_documents",
 ]
 
