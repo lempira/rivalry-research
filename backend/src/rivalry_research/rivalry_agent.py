@@ -3,10 +3,10 @@
 import logging
 from typing import Any
 
-from pydantic_ai import Agent, RunContext, InstrumentationSettings
+from pydantic_ai import Agent, InstrumentationSettings
 
 from .config import get_settings
-from .logging_utils import format_entity_details, log_tool_usage
+from .logging_utils import format_entity_details
 from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
 from .rag.file_search_client import retrieve_relevant_documents
 from .sources import validate_event_sources, compute_sources_summary, fetch_all_images
@@ -128,11 +128,9 @@ def create_rivalry_entity(wikidata_entity: WikidataEntity) -> RivalryEntity:
 # System prompt for the rivalry analysis agent
 SYSTEM_PROMPT = """You are a rivalry analysis expert that examines relationships between people using both structured Wikidata facts and biographical documents.
 
-IMPORTANT: You have access to a 'search_biographical_documents' tool. You MUST use this tool extensively to query biographical information about both people before completing your analysis.
-
 Your task is to:
-1. Use the 'search_biographical_documents' tool to query information about both people (make multiple targeted queries)
-2. Analyze the provided entity data, direct relationships, and shared properties from Wikidata
+1. Analyze the provided entity data, direct relationships, and shared properties from Wikidata
+2. Review the biographical document search results that have been provided
 3. Combine insights from biographical documents and Wikidata to determine if a rivalrous relationship exists
 4. Extract specific factual incidents or events with dates that demonstrate the rivalry
 5. CAPTURE THE DRAMA: Focus on direct interactions, confrontations, insults, and heated exchanges
@@ -163,24 +161,6 @@ Using Wikidata Structured Data:
 - Similar accomplishments in the same domain often indicate rivalry (e.g., both invented calculus)
 - Temporal overlap (same time period) establishes they were contemporaries
 - Shared institutions/awards/fields provide context for potential conflict
-
-Using the search_biographical_documents Tool:
-MAKE MULTIPLE TARGETED QUERIES to extract dramatic interactions:
-- "conflicts between [person1] and [person2]"
-- "disputes between [person1] and [person2]"
-- "what [person1] said about [person2]" (and reverse)
-- "criticisms by [person1] of [person2]" (and reverse)
-- "meetings between [person1] and [person2]"
-- "public confrontations" + both names
-- "published attacks" or "published criticisms" + both names
-- "personal animosity" or "hostility" + both names
-- "insults" or "verbal attacks" + both names
-- "[person1] response to [person2]"
-- "relationship between [person1] and [person2]"
-- "rivalry" or "feud" + both names
-- Look for biography sections labeled: "Controversy", "Dispute", "Rivalry", "Conflict", "Relationship with X"
-- Query for correspondence, published papers that reference each other, public statements
-- Make 5-10 targeted queries minimum to thoroughly investigate the dramatic aspects
 
 Entity Data Requirements:
 - Populate entity1 and entity2 objects with biographical data (birth_date, death_date already provided)
@@ -281,7 +261,6 @@ rivalry_agent = Agent(
     settings.rivalry_model,
     output_type=RivalryAnalysis,
     system_prompt=SYSTEM_PROMPT,
-    deps_type=str,  # Store name passed as dependency
     instrument=InstrumentationSettings(
         include_content=True,  # Include tool args/responses
         version=3,             # OpenTelemetry GenAI v3
@@ -289,24 +268,217 @@ rivalry_agent = Agent(
 )
 
 
-@rivalry_agent.tool
-def search_biographical_documents(ctx: RunContext[str], query: str) -> str:
+def _format_entities_section(
+    entity1: WikidataEntity,
+    entity2: WikidataEntity,
+    rivalry_entity1: RivalryEntity,
+    rivalry_entity2: RivalryEntity,
+) -> str:
+    """
+    Format both entities' information section.
+    
+    Args:
+        entity1: First Wikidata entity
+        entity2: Second Wikidata entity
+        rivalry_entity1: First rivalry entity with biographical data
+        rivalry_entity2: Second rivalry entity with biographical data
+    
+    Returns:
+        Formatted string with both entities' information
+    """
+    entity1_details = format_entity_details(entity1)
+    entity2_details = format_entity_details(entity2)
+    
+    return f"""
+Entity 1:
+- ID: {entity1.id}
+- Name: {entity1.label}
+- Description: {entity1.description or 'N/A'}
+- Birth Date: {rivalry_entity1.birth_date or 'Unknown'}
+- Death Date: {rivalry_entity1.death_date or 'Unknown'}
+- Occupation: {', '.join(rivalry_entity1.occupation) if rivalry_entity1.occupation else 'N/A'}
+- Nationality: {rivalry_entity1.nationality or 'N/A'}{entity1_details}
+
+Entity 2:
+- ID: {entity2.id}
+- Name: {entity2.label}
+- Description: {entity2.description or 'N/A'}
+- Birth Date: {rivalry_entity2.birth_date or 'Unknown'}
+- Death Date: {rivalry_entity2.death_date or 'Unknown'}
+- Occupation: {', '.join(rivalry_entity2.occupation) if rivalry_entity2.occupation else 'N/A'}
+- Nationality: {rivalry_entity2.nationality or 'N/A'}{entity2_details}
+"""
+
+
+def _format_relationships_section(relationships: list[Relationship]) -> str:
+    """
+    Format direct relationships section.
+    
+    Args:
+        relationships: List of direct relationships between entities
+    
+    Returns:
+        Formatted string with relationships or message if none found
+    """
+    section = "\nDirect Relationships Found:"
+    
+    if relationships:
+        for rel in relationships:
+            section += f"\n- {rel.source_entity_label} --[{rel.property_label}]--> {rel.target_entity_label or rel.value}"
+    else:
+        section += "\nNo direct relationships found in Wikidata."
+    
+    return section
+
+
+def _format_shared_properties_section(shared_properties: dict[str, Any]) -> str:
+    """
+    Format shared properties section with value limiting logic.
+    
+    Args:
+        shared_properties: Dictionary of properties both entities share
+    
+    Returns:
+        Formatted string with shared properties or message if none found
+    """
+    section = "\n\nShared Properties (Common Connections):"
+    
+    if shared_properties:
+        section += "\n"
+        # Limit to top 15 properties to avoid token bloat
+        for i, (prop_id, data) in enumerate(list(shared_properties.items())[:15]):
+            prop_label = data.get('label', prop_id)
+            values = data.get('values', [])
+            
+            # Show first 3 values for each property
+            value_labels = [v.get('label', v.get('id', '?')) for v in values[:3]]
+            value_str = ', '.join(value_labels)
+            
+            if len(values) > 3:
+                value_str += f' (and {len(values) - 3} more)'
+            
+            section += f"- Both: {prop_label} = {value_str}\n"
+    else:
+        section += "\nNo shared properties found."
+    
+    return section
+
+
+def _format_sources_section(all_sources: dict[str, Source]) -> str:
+    """
+    Format available sources section for citation.
+    
+    Args:
+        all_sources: Dictionary mapping source_id to Source objects
+    
+    Returns:
+        Formatted string with available sources or message if none
+    """
+    section = "\n\nAvailable Sources (for citation in timeline events):"
+    
+    if all_sources:
+        section += "\n"
+        for source in all_sources.values():
+            section += f"""
+- Source ID: {source.source_id}
+  - Type: {source.type}
+  - Title: {source.title}
+  - URL: {source.url}
+  - Credibility: {source.credibility_score:.2f}
+  - Primary Source: {source.is_primary_source}
+"""
+    else:
+        section += "\nNo sources available."
+    
+    return section
+
+
+def _get_search_results_header() -> str:
+    """
+    Return static header text for biographical search results section.
+    
+    Returns:
+        Multi-line string with instructions for using search results
+    """
+    return """
+
+Biographical Document Search Results:
+The biographical documents for both people have been searched and relevant results are included below.
+Use these search results along with Wikidata information to:
+- Extract timeline events with specific dates
+- Identify publications, achievements, and milestones
+- Find evidence of conflicts, disputes, or competitive interactions
+- Understand context about their relationship or lack thereof
+
+When creating timeline events, reference the sources above using their source_id.
+Include the supporting_text from the source that evidences the event.
+Combine insights from both Wikidata and biographical search results for a comprehensive analysis.
+"""
+
+
+def _execute_and_format_searches(
+    store_name: str,
+    entity1_label: str,
+    entity2_label: str,
+    custom_queries: list[str] | None,
+) -> str:
+    """
+    Execute biographical document searches and return formatted results.
+    
+    Args:
+        store_name: File Search store name
+        entity1_label: Label of first entity
+        entity2_label: Label of second entity
+        custom_queries: Optional list of custom queries. If None, uses defaults.
+    
+    Returns:
+        Formatted string with all search results, or empty string if no results
+    """
+    # Use default queries if none provided
+    if custom_queries is None:
+        logger.info("No custom queries provided, using default search queries")
+        search_queries = [
+            f"conflicts between {entity1_label} and {entity2_label}",
+            f"disputes between {entity1_label} and {entity2_label}",
+            f"what {entity1_label} said about {entity2_label}",
+            f"what {entity2_label} said about {entity1_label}",
+            f"meetings between {entity1_label} and {entity2_label}",
+            f"rivalry between {entity1_label} and {entity2_label}",
+            f"relationship between {entity1_label} and {entity2_label}",
+        ]
+    else:
+        search_queries = custom_queries
+    
+    logger.info(f"Performing {len(search_queries)} biographical document searches")
+    search_results = []
+    
+    for i, query in enumerate(search_queries, 1):
+        logger.debug(f"Search {i}/{len(search_queries)}: {query}")
+        result_text = search_biographical_documents(store_name, query)
+        search_results.append(f"\n=== Search Query {i}: {query} ===\n{result_text}")
+    
+    if search_results:
+        logger.info(f"Collected {len(search_results)} search results")
+        return "\n".join(search_results)
+    
+    return ""
+
+
+def search_biographical_documents(store_name: str, query: str) -> str:
     """
     Search biographical documents for information about the people being analyzed.
     
-    Use this tool to retrieve relevant document chunks from the File Search store.
+    Retrieves relevant document chunks from the File Search store.
     Each chunk includes the source metadata and reference information.
-    You can make multiple queries to gather comprehensive information.
     
     Args:
-        ctx: RunContext containing store_name as dependency
+        store_name: Name of the File Search store to query
         query: Natural language search query about the people
     
     Returns:
         Formatted document chunks with source metadata
     """
-    store_name = ctx.deps
-    logger.debug(f"Tool 'search_biographical_documents' called with query: {query}")
+    logger.debug(f"Function 'search_biographical_documents' called with query: {query}")
     
     try:
         documents = retrieve_relevant_documents(store_name, query)
@@ -341,6 +513,7 @@ def analyze_rivalry(
     shared_properties: dict[str, Any],
     store_name: str,
     sources: list[Source],
+    search_queries: list[str] | None = None,
 ) -> RivalryAnalysis:
     """
     Analyze the rivalry between two entities using AI.
@@ -349,8 +522,8 @@ def analyze_rivalry(
     and uses an AI agent to determine if a rivalry exists, rate its intensity, and
     extract specific facts about the rivalry.
     
-    The agent queries biographical documents via File Search to enrich the analysis
-    with timeline events and narrative context.
+    Biographical documents are searched using the provided queries before the agent runs.
+    If no queries are provided, a default set targeting conflicts and interactions is used.
     
     The provided sources are used to build the source catalog for citations.
 
@@ -364,6 +537,7 @@ def analyze_rivalry(
         shared_properties: Dictionary of properties both entities share
         store_name: File Search store name for biographical document access
         sources: List of pre-fetched sources to be used in the analysis
+        search_queries: Optional list of custom search queries. If None, default queries are used.
 
     Returns:
         RivalryAnalysis with structured rivalry data including source catalog
@@ -401,106 +575,43 @@ def analyze_rivalry(
     rivalry_entity2.images = fetch_all_images(entity2)
     logger.info(f"Found {len(rivalry_entity1.images)} images for {entity1.label}, {len(rivalry_entity2.images)} images for {entity2.label}")
     
-    # Prepare context for the AI agent
-    entity1_details = format_entity_details(entity1)
-    entity2_details = format_entity_details(entity2)
+    # ============================================================
+    # BUILD BASE CONTEXT (Wikidata information + instructions)
+    # ============================================================
+    context_sections = [
+        _format_entities_section(entity1, entity2, rivalry_entity1, rivalry_entity2),
+        _format_relationships_section(relationships),
+        _format_shared_properties_section(shared_properties),
+        _format_sources_section(all_sources),
+        _get_search_results_header(),
+        "\nBased on this data, analyze if a rivalry exists between these two people.",
+    ]
     
-    context = f"""
-Entity 1:
-- ID: {entity1.id}
-- Name: {entity1.label}
-- Description: {entity1.description or 'N/A'}
-- Birth Date: {rivalry_entity1.birth_date or 'Unknown'}
-- Death Date: {rivalry_entity1.death_date or 'Unknown'}
-- Occupation: {', '.join(rivalry_entity1.occupation) if rivalry_entity1.occupation else 'N/A'}
-- Nationality: {rivalry_entity1.nationality or 'N/A'}{entity1_details}
-
-Entity 2:
-- ID: {entity2.id}
-- Name: {entity2.label}
-- Description: {entity2.description or 'N/A'}
-- Birth Date: {rivalry_entity2.birth_date or 'Unknown'}
-- Death Date: {rivalry_entity2.death_date or 'Unknown'}
-- Occupation: {', '.join(rivalry_entity2.occupation) if rivalry_entity2.occupation else 'N/A'}
-- Nationality: {rivalry_entity2.nationality or 'N/A'}{entity2_details}
-
-Direct Relationships Found:
-"""
-
-    if relationships:
-        for rel in relationships:
-            context += f"\n- {rel.source_entity_label} --[{rel.property_label}]--> {rel.target_entity_label or rel.value}"
-    else:
-        context += "\nNo direct relationships found in Wikidata."
-
-    # Add shared properties section
-    context += "\n\nShared Properties (Common Connections):"
+    context = "".join(context_sections)
     
-    if shared_properties:
-        context += "\n"
-        # Limit to top 15 properties to avoid token bloat
-        for i, (prop_id, data) in enumerate(list(shared_properties.items())[:15]):
-            prop_label = data.get('label', prop_id)
-            values = data.get('values', [])
-            
-            # Show first 3 values for each property
-            value_labels = [v.get('label', v.get('id', '?')) for v in values[:3]]
-            value_str = ', '.join(value_labels)
-            
-            if len(values) > 3:
-                value_str += f' (and {len(values) - 3} more)'
-            
-            context += f"- Both: {prop_label} = {value_str}\n"
-    else:
-        context += "\nNo shared properties found."
-
-    # Add available sources information
-    context += "\n\nAvailable Sources (for citation in timeline events):"
-    if all_sources:
-        context += "\n"
-        for source in all_sources.values():
-            context += f"""
-- Source ID: {source.source_id}
-  - Type: {source.type}
-  - Title: {source.title}
-  - URL: {source.url}
-  - Credibility: {source.credibility_score:.2f}
-  - Primary Source: {source.is_primary_source}
-"""
-    else:
-        context += "\nNo sources available."
-    
-    # Add instruction about biographical documents
-    context += """
-
-Biographical Documents Available:
-You have access to biographical documents for both people via File Search.
-Query these documents to find:
-- Timeline events with specific dates
-- Publications, achievements, and milestones
-- Evidence of conflicts, disputes, or competitive interactions
-- Context about their relationship or lack thereof
-
-When creating timeline events, reference the sources above using their source_id.
-Include the supporting_text from the source that evidences the event.
-Combine insights from both Wikidata and biographical documents for a comprehensive analysis.
-"""
-    
-    context += "\nBased on this data, analyze if a rivalry exists between these two people."
-
-    # Run agent with search tool
+    # ============================================================
+    # EXECUTE SEARCHES & APPEND RESULTS TO CONTEXT
+    # ============================================================
     logger.info(f"Using File Search store: {store_name}")
-    logger.debug("Agent has access to search_biographical_documents tool")
-    logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
-    logger.info("Running AI agent with biographical search tool...")
     
-    result = rivalry_agent.run_sync(
-        context,
-        deps=store_name,  # Pass store name as dependency for tool
+    search_results_text = _execute_and_format_searches(
+        store_name,
+        entity1.label,
+        entity2.label,
+        search_queries,
     )
     
-    # Log tool usage at DEBUG level
-    log_tool_usage(result)
+    if search_results_text:
+        context += "\n\n" + search_results_text
+        logger.info("Search results appended to context")
+    
+    # ============================================================
+    # RUN AGENT WITH COMPLETE CONTEXT
+    # ============================================================
+    logger.debug(f"Agent prompt (first 500 chars): {context[:500]}...")
+    logger.info("Running AI agent with biographical search results...")
+    
+    result = rivalry_agent.run_sync(context)
     
     logger.info(
         f"Agent analysis complete: rivalry={result.output.rivalry_exists}, "

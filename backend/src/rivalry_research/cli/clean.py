@@ -59,7 +59,9 @@ def show_what_will_be_deleted(
         status = "✓ exists" if raw_sources_dir.exists() else "✗ not found"
         typer.echo(f"Sources:      {count:>5} files, {size:>10} ({status})")
         typer.echo(f"  Path: {raw_sources_dir}")
-        
+    
+    # Only show database for "all" scope
+    if scope == "all":
         db_status = "✓ exists" if sources_db.exists() else "✗ not found"
         db_size = format_size(sources_db)
         typer.echo(f"Database:     {db_size:>17} ({db_status})")
@@ -179,11 +181,10 @@ def clean_sources(
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be deleted without deleting"),
 ) -> None:
     """
-    Delete only source data.
+    Delete only downloaded source files.
     
-    This will delete:
-    - All downloaded sources in data/raw_sources/
-    - The SQLite database at data/sources.db
+    This will delete all downloaded sources in data/raw_sources/
+    The database will be preserved. Use 'clean database' to delete it separately.
     """
     settings = get_settings()
     
@@ -199,22 +200,13 @@ def clean_sources(
         return
     
     if not force:
-        typer.confirm("\nDelete sources and database?", abort=True)
+        typer.confirm("\nDelete sources?", abort=True)
     
     typer.echo("\nDeleting...")
     
-    deleted = []
-    
     if delete_path(settings.raw_sources_dir, dry_run):
-        deleted.append("sources")
         typer.echo("✓ Deleted sources")
-    
-    if delete_path(settings.sources_db_path, dry_run):
-        deleted.append("database")
-        typer.echo("✓ Deleted database")
-    
-    if deleted:
-        typer.echo(f"\n✓ Successfully deleted: {', '.join(deleted)}")
+        typer.echo(f"\n✓ Successfully deleted sources from: {settings.raw_sources_dir}")
     else:
         typer.echo("\n✗ No sources found to delete")
 
