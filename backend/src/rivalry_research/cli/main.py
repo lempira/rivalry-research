@@ -2,7 +2,7 @@
 
 import typer
 
-from . import clean, fs
+from . import clean, fs, sources
 
 app = typer.Typer(
     name="rivalry",
@@ -13,6 +13,7 @@ app = typer.Typer(
 # Register subcommand groups
 app.add_typer(clean.app, name="clean", help="Data cleanup commands")
 app.add_typer(fs.app, name="fs", help="File Search management commands")
+app.add_typer(sources.app, name="sources", help="Source management commands")
 
 
 if __name__ == "__main__":
