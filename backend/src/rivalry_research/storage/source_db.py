@@ -43,6 +43,7 @@ class SourceDatabase:
                     is_primary_source INTEGER DEFAULT 0,
                     stored_content_path TEXT,
                     content_hash TEXT,
+                    is_manual INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -157,8 +158,8 @@ class SourceDatabase:
                 INSERT INTO sources (
                     source_id, type, title, authors, publication, publication_date,
                     url, doi, isbn, retrieved_at, credibility_score, is_primary_source,
-                    stored_content_path, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    stored_content_path, content_hash, is_manual
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source.source_id,
@@ -175,6 +176,7 @@ class SourceDatabase:
                     1 if source.is_primary_source else 0,
                     source.stored_content_path,
                     source.content_hash,
+                    1 if source.is_manual else 0,
                 )
             )
             conn.commit()
@@ -239,5 +241,6 @@ class SourceDatabase:
             is_primary_source=bool(row["is_primary_source"]),
             stored_content_path=row["stored_content_path"],
             content_hash=row["content_hash"],
+            is_manual=bool(row.get("is_manual", 0)),
         )
 

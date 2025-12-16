@@ -149,6 +149,10 @@ class Source(BaseModel):
     content_hash: str | None = Field(
         None, description="Hash of content for deduplication"
     )
+    is_manual: bool = Field(
+        default=False,
+        description="Whether this source was manually added (True) or auto-fetched (False)",
+    )
 
 
 class EventSource(BaseModel):

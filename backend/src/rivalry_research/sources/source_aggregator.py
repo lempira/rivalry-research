@@ -129,6 +129,9 @@ def _fetch_and_store_wikipedia(
     # Calculate content hash
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     source.content_hash = content_hash
+    
+    # Mark as auto-fetched
+    source.is_manual = False
 
     # Get entity-organized directory structure
     entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
@@ -194,6 +197,9 @@ def _fetch_and_store_scholar(
         # Calculate content hash
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
+        
+        # Mark as auto-fetched
+        source.is_manual = False
 
         # Get entity-organized directory structure
         entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
@@ -260,6 +266,9 @@ def _fetch_and_store_arxiv(
         # Calculate content hash
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
+        
+        # Mark as auto-fetched
+        source.is_manual = False
 
         # Get entity-organized directory structure
         entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
