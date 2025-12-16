@@ -9,7 +9,7 @@ from ..storage import SourceDatabase
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
-from .utils import get_content_path
+from .utils import get_content_path, get_original_file_path
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,18 @@ def _fetch_and_store_wikipedia(
     existing = db.get_source_by_url(entity.wikipedia_url)
     if existing:
         logger.info(f"Wikipedia source already exists: {existing.source_id}")
+        
+        # Check if original HTML file exists
+        html_path = get_original_file_path(raw_sources_dir, existing.url, "html")
+        if not html_path.exists():
+            logger.info(f"Original HTML missing for {existing.source_id}, will save it")
+            # Fetch to get the HTML bytes
+            source, content, html_bytes = fetch_wikipedia_source(entity)
+            # Save the original HTML
+            html_path.write_bytes(html_bytes)
+            logger.debug(f"Saved original HTML to {html_path}")
+            return existing, content
+        
         # We need the content, so read it from disk if available
         if existing.stored_content_path:
             try:
@@ -108,18 +120,23 @@ def _fetch_and_store_wikipedia(
         # If content missing or not stored path, re-fetch
     
     # Fetch new source
-    source, content = fetch_wikipedia_source(entity)
+    source, content, html_bytes = fetch_wikipedia_source(entity)
 
     # Calculate content hash
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     source.content_hash = content_hash
 
-    # Save raw content to disk
+    # Save extracted text content to disk
     content_path = get_content_path(raw_sources_dir, source.url, "txt")
     content_path.write_text(content, encoding="utf-8")
     source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
     logger.debug(f"Saved content to {content_path}")
+
+    # Save original HTML file
+    html_path = get_original_file_path(raw_sources_dir, source.url, "html")
+    html_path.write_bytes(html_bytes)
+    logger.debug(f"Saved original HTML to {html_path}")
 
     # Add to database
     source = db.add_source(source)
@@ -148,11 +165,19 @@ def _fetch_and_store_scholar(
     scholar_results = fetch_scholar_sources(entity, max_results)
     stored_results = []
 
-    for source, content in scholar_results:
+    for source, content, pdf_bytes in scholar_results:
         # Check if URL already exists in database
         existing = db.get_source_by_url(source.url)
         if existing:
             logger.info(f"Scholar source already exists: {existing.source_id}")
+            
+            # Check if original PDF file exists, save it if missing
+            pdf_path = get_original_file_path(raw_sources_dir, existing.url, "pdf")
+            if not pdf_path.exists():
+                logger.info(f"Original PDF missing for {existing.source_id}, saving it")
+                pdf_path.write_bytes(pdf_bytes)
+                logger.debug(f"Saved original PDF to {pdf_path}")
+            
             # If exists, we use the existing source metadata but the fetched content
             # (or we could read from disk, but we already have the content here from fetch)
             stored_results.append((existing, content))
@@ -162,12 +187,17 @@ def _fetch_and_store_scholar(
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
 
-        # Save raw content to disk
+        # Save extracted text content to disk
         content_path = get_content_path(raw_sources_dir, source.url, "txt")
         content_path.write_text(content, encoding="utf-8")
         source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
         logger.debug(f"Saved Scholar content to {content_path}")
+
+        # Save original PDF file
+        pdf_path = get_original_file_path(raw_sources_dir, source.url, "pdf")
+        pdf_path.write_bytes(pdf_bytes)
+        logger.debug(f"Saved original PDF to {pdf_path}")
 
         # Add to database
         source = db.add_source(source)
@@ -199,11 +229,19 @@ def _fetch_and_store_arxiv(
     arxiv_results = fetch_arxiv_sources(entity, max_results)
     stored_results = []
 
-    for source, content in arxiv_results:
+    for source, content, pdf_bytes in arxiv_results:
         # Check if URL already exists in database
         existing = db.get_source_by_url(source.url)
         if existing:
             logger.info(f"arXiv source already exists: {existing.source_id}")
+            
+            # Check if original PDF file exists, save it if missing
+            pdf_path = get_original_file_path(raw_sources_dir, existing.url, "pdf")
+            if not pdf_path.exists():
+                logger.info(f"Original PDF missing for {existing.source_id}, saving it")
+                pdf_path.write_bytes(pdf_bytes)
+                logger.debug(f"Saved original PDF to {pdf_path}")
+            
             stored_results.append((existing, content))
             continue
 
@@ -211,12 +249,17 @@ def _fetch_and_store_arxiv(
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
 
-        # Save raw content to disk
+        # Save extracted text content to disk
         content_path = get_content_path(raw_sources_dir, source.url, "txt")
         content_path.write_text(content, encoding="utf-8")
         source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
         logger.debug(f"Saved arXiv content to {content_path}")
+
+        # Save original PDF file
+        pdf_path = get_original_file_path(raw_sources_dir, source.url, "pdf")
+        pdf_path.write_bytes(pdf_bytes)
+        logger.debug(f"Saved original PDF to {pdf_path}")
 
         # Add to database
         source = db.add_source(source)

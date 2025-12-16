@@ -148,7 +148,7 @@ Related Entity: {entity.label} ({entity.id})
 
 def fetch_scholar_sources(
     entity: WikidataEntity, max_results: int = 5, max_candidates: int = 20
-) -> list[tuple[Source, str]]:
+) -> list[tuple[Source, str, bytes]]:
     """
     Fetch academic papers with full text PDFs about an entity from Google Scholar.
 
@@ -161,7 +161,7 @@ def fetch_scholar_sources(
         max_candidates: Maximum papers to check for PDFs (default: 20)
 
     Returns:
-        List of (Source, content) tuples with full text
+        List of (Source, content, pdf_bytes) tuples with full text and original PDF
     """
     logger.info(f"Searching Google Scholar for {entity.label} ({entity.id})")
 
@@ -195,9 +195,15 @@ def fetch_scholar_sources(
 
                 # Try to download and extract PDF
                 logger.debug(f"Downloading PDF for '{metadata['title']}'")
-                pdf_result = fetch_pdf_content(metadata["pdf_url"])
+                pdf_data = fetch_pdf_content(metadata["pdf_url"])
 
-                if pdf_result is None or not pdf_result.success:
+                if pdf_data is None:
+                    logger.debug(f"Skipping '{metadata['title']}': PDF download failed")
+                    continue
+                
+                pdf_result, pdf_bytes = pdf_data
+
+                if not pdf_result.success:
                     logger.debug(f"Skipping '{metadata['title']}': PDF extraction failed")
                     continue
 
@@ -222,7 +228,7 @@ def fetch_scholar_sources(
                 )
 
                 content = _format_paper_content(metadata, entity, pdf_result.text)
-                sources.append((source, content))
+                sources.append((source, content, pdf_bytes))
 
                 logger.info(
                     f"Fetched Scholar paper with full text: {source.title} "

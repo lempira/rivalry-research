@@ -77,6 +77,24 @@ def get_content_path(base_dir: Path, url: str, extension: str = "txt") -> Path:
     return content_dir / f"content.{extension}"
 
 
+def get_original_file_path(base_dir: Path, url: str, extension: str) -> Path:
+    """
+    Generate a storage path for the original source file based on URL hash.
+    
+    Args:
+        base_dir: Base directory for raw sources
+        url: Source URL
+        extension: File extension (e.g., "pdf", "html")
+    
+    Returns:
+        Path for storing the original file
+    """
+    url_hash = hash_url(url)
+    content_dir = base_dir / url_hash
+    content_dir.mkdir(parents=True, exist_ok=True)
+    return content_dir / f"original.{extension}"
+
+
 def get_iso_timestamp() -> str:
     """
     Get current timestamp in ISO format.

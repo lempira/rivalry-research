@@ -88,7 +88,7 @@ def _clean_html_to_text(html: str) -> str:
 
 def fetch_wikipedia_content(
     wikipedia_url: str, timeout: float = 30.0
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """
     Fetch Wikipedia article content.
     
@@ -97,7 +97,7 @@ def fetch_wikipedia_content(
         timeout: Request timeout in seconds
     
     Returns:
-        Tuple of (article_title, article_text)
+        Tuple of (article_title, article_text, html_content)
     
     Raises:
         httpx.HTTPError: If the request fails
@@ -133,7 +133,7 @@ def fetch_wikipedia_content(
         html_content = data["parse"]["text"]["*"]
         clean_text = _clean_html_to_text(html_content)
         
-        return article_title, clean_text
+        return article_title, clean_text, html_content
 
 
 def format_as_document(
@@ -164,7 +164,7 @@ Description: {entity.description or 'N/A'}
     return metadata_header + article_text
 
 
-def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tuple[Source, str]:
+def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tuple[Source, str, bytes]:
     """
     Fetch Wikipedia article as a Source object with content.
     
@@ -173,7 +173,7 @@ def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tup
         timeout: Request timeout in seconds
     
     Returns:
-        Tuple of (Source object, article_content)
+        Tuple of (Source object, article_content, html_bytes)
     
     Raises:
         ValueError: If entity has no Wikipedia URL
@@ -184,7 +184,7 @@ def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tup
     if not entity.wikipedia_url:
         raise ValueError(f"Entity {entity.id} has no Wikipedia URL")
     
-    article_title, article_text = fetch_wikipedia_content(entity.wikipedia_url, timeout)
+    article_title, article_text, html_content = fetch_wikipedia_content(entity.wikipedia_url, timeout)
     
     source = Source(
         source_id=generate_source_id(entity.wikipedia_url, "wiki"),
@@ -202,7 +202,10 @@ def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tup
     # Format content with metadata header
     content = format_as_document(article_title, article_text, entity)
     
+    # Convert HTML to bytes for storage
+    html_bytes = html_content.encode('utf-8')
+    
     logger.info(f"Created Wikipedia source: {source.source_id} - {article_title}")
     
-    return source, content
+    return source, content, html_bytes
 

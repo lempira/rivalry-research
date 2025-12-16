@@ -109,7 +109,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> PDFExtractionResult:
         )
 
 
-def fetch_pdf_content(url: str) -> PDFExtractionResult | None:
+def fetch_pdf_content(url: str) -> tuple[PDFExtractionResult, bytes] | None:
     """
     Download a PDF and extract its text content.
 
@@ -119,10 +119,10 @@ def fetch_pdf_content(url: str) -> PDFExtractionResult | None:
         url: URL to the PDF file
 
     Returns:
-        PDFExtractionResult if successful, None if download failed
+        Tuple of (PDFExtractionResult, pdf_bytes) if successful, None if download failed
     """
     pdf_bytes = download_pdf(url)
     if pdf_bytes is None:
         return None
 
-    return extract_text_from_pdf(pdf_bytes)
+    return extract_text_from_pdf(pdf_bytes), pdf_bytes

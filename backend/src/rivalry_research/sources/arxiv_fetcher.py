@@ -77,7 +77,7 @@ Related Entity: {entity.label} ({entity.id})
 
 def fetch_arxiv_sources(
     entity: WikidataEntity, max_results: int = 5
-) -> list[tuple[Source, str]]:
+) -> list[tuple[Source, str, bytes]]:
     """
     Fetch academic papers with full text from arXiv.
 
@@ -89,7 +89,7 @@ def fetch_arxiv_sources(
         max_results: Maximum number of papers to fetch (default: 5)
 
     Returns:
-        List of (Source, content) tuples with full text
+        List of (Source, content, pdf_bytes) tuples with full text and original PDF
     """
     logger.info(f"Searching arXiv for {entity.label} ({entity.id})")
 
@@ -151,7 +151,7 @@ def fetch_arxiv_sources(
                 )
 
                 content = _format_paper_content(paper, entity, pdf_result.text)
-                sources.append((source, content))
+                sources.append((source, content, pdf_bytes))
 
                 logger.info(
                     f"Fetched arXiv paper: {source.title} "
