@@ -178,3 +178,29 @@ def get_iso_timestamp() -> str:
     """
     return datetime.now(timezone.utc).isoformat()
 
+
+def extract_entity_id_from_path(path: Path) -> str:
+    """
+    Extract entity ID from a directory path.
+    
+    Expects directory names like "Max_Planck_Q9021" or "Ernst_Mach_Q93996"
+    
+    Args:
+        path: Path to entity directory
+    
+    Returns:
+        Entity ID (e.g., "Q9021") or "unknown" if not found
+    """
+    dir_name = path.name
+    # Match pattern like Q followed by digits at the end
+    match = re.search(r'_(Q\d+)$', dir_name)
+    if match:
+        return match.group(1)
+    
+    # Try without underscore prefix (in case dir is just "Q9021")
+    match = re.search(r'^(Q\d+)$', dir_name)
+    if match:
+        return match.group(1)
+    
+    return "unknown"
+
