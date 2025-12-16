@@ -14,7 +14,6 @@ from .models import (
 )
 from .config import get_settings
 from .rag.file_search_client import (
-    check_document_exists,
     get_or_create_store,
     upload_document,
 )
@@ -125,7 +124,12 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
     all_source_tuples = sources_1_tuples + sources_2_tuples
     all_sources_list = [t[0] for t in all_source_tuples]
     
+    # Count sources by origin
+    manual_count = sum(1 for s in all_sources_list if s.is_manual)
+    auto_count = len(all_sources_list) - manual_count
+    
     logger.info(f"Collected {len(all_sources_list)} total sources")
+    logger.info(f"Source breakdown: {manual_count} manual, {auto_count} auto-fetched")
     
     # Upload content to File Search
     logger.info("Uploading source content to File Search store")
@@ -140,6 +144,7 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
         custom_metadata = {
             "source_id": source.source_id,
             "source_type": source.type,
+            "is_manual": source.is_manual,
             "title": source.title,
             "url": source.url,
         }

@@ -96,10 +96,13 @@ def fetch_arxiv_sources(
     sources = []
 
     try:
-        # Construct search query
+        # Construct search query with biographical focus
         search_query = f'"{entity.label}"'
         if entity.description:
             search_query += f" {entity.description}"
+        
+        # Add biographical keywords to prioritize biographical/historical content
+        search_query += " (biography OR life OR career OR history OR biographical)"
 
         logger.debug(f"arXiv search query: {search_query}")
 

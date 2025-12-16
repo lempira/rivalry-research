@@ -62,7 +62,7 @@ class EntityImage(BaseModel):
     url: str = Field(..., description="Full resolution image URL")
     thumbnail_url: str | None = Field(None, description="Smaller thumbnail URL")
     source: str = Field(
-        ..., description="Image source: 'commons', 'wikipedia', 'loc', 'europeana'"
+        ..., description="Image source: 'commons', 'wikipedia', 'loc', 'europeana', 'manual'"
     )
     title: str | None = Field(None, description="Image title or caption")
     license: str = Field(
@@ -70,6 +70,9 @@ class EntityImage(BaseModel):
     )
     attribution: str | None = Field(
         None, description="Required attribution text if license requires it"
+    )
+    local_path: str | None = Field(
+        None, description="Local file path if image has been downloaded"
     )
 
 

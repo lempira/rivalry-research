@@ -169,10 +169,13 @@ def fetch_scholar_sources(
     candidates_checked = 0
 
     try:
-        # Construct search query
+        # Construct search query with biographical focus
         search_query = f'"{entity.label}"'
         if entity.description:
             search_query += f" {entity.description}"
+        
+        # Add biographical keywords to prioritize biographical/historical content
+        search_query += " (biography OR life OR career OR obituary OR biographical)"
 
         logger.debug(f"Scholar search query: {search_query}")
 

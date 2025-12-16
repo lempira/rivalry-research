@@ -336,3 +336,49 @@ def health_check(
         typer.echo(f"Error during health check: {e}", err=True)
         raise typer.Exit(1)
 
+
+@app.command("show-sources")
+def show_sources():
+    """
+    Show sources available for File Search indexing.
+    
+    Displays sources by type and origin to help understand what will
+    be included in the File Search store.
+    """
+    from ..config import get_settings
+    from ..sources import get_source_statistics
+    from ..storage import SourceDatabase
+    from pathlib import Path
+    
+    settings = get_settings()
+    raw_sources_dir = Path(settings.raw_sources_dir)
+    db = SourceDatabase(settings.sources_db)
+    
+    typer.echo("\n" + "=" * 70)
+    typer.echo("SOURCE STATISTICS")
+    typer.echo("=" * 70 + "\n")
+    
+    stats = get_source_statistics(raw_sources_dir, db)
+    
+    typer.echo(f"Total processed sources: {stats['total_sources']}")
+    typer.echo(f"Unprocessed sources: {stats['unprocessed_sources']}")
+    typer.echo(f"Invalid sources: {stats['invalid_sources']}")
+    
+    typer.echo("\nBy Origin:")
+    typer.echo(f"  Manual: {stats.get('manual_sources', 0)}")
+    typer.echo(f"  Auto-fetched: {stats.get('auto_sources', 0)}")
+    
+    # Show database stats
+    db_stats = db.get_stats()
+    
+    if db_stats.get('by_type'):
+        typer.echo("\nBy Type:")
+        for source_type, count in sorted(db_stats['by_type'].items()):
+            typer.echo(f"  {source_type}: {count}")
+    
+    if stats['unprocessed_sources'] > 0:
+        typer.echo(f"\n⚠ Warning: {stats['unprocessed_sources']} sources need processing")
+        typer.echo("Run: rivalry sources process --all")
+    
+    typer.echo()
+

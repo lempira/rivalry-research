@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 import pymupdf
@@ -107,6 +108,39 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> PDFExtractionResult:
             success=False,
             error=str(e),
         )
+
+
+def extract_pdf_text(pdf_path: Path | str) -> str:
+    """
+    Extract text from a PDF file on disk.
+    
+    Convenience function for extracting text from a file path.
+    
+    Args:
+        pdf_path: Path to PDF file
+    
+    Returns:
+        Extracted text content
+    
+    Raises:
+        FileNotFoundError: If PDF file doesn't exist
+        Exception: If extraction fails
+    """
+    pdf_path = Path(pdf_path)
+    
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+    
+    # Read PDF bytes
+    pdf_bytes = pdf_path.read_bytes()
+    
+    # Extract text
+    result = extract_text_from_pdf(pdf_bytes)
+    
+    if not result.success:
+        raise Exception(f"PDF extraction failed: {result.error}")
+    
+    return result.text
 
 
 def fetch_pdf_content(url: str) -> tuple[PDFExtractionResult, bytes] | None:
