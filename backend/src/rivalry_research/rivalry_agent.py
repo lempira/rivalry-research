@@ -569,11 +569,11 @@ def analyze_rivalry(
     logger.debug(f"Entity 1 biographical data: birth={rivalry_entity1.birth_date}, death={rivalry_entity1.death_date}")
     logger.debug(f"Entity 2 biographical data: birth={rivalry_entity2.birth_date}, death={rivalry_entity2.death_date}")
 
-    # Fetch images for both entities from multiple sources
-    logger.info("Fetching images for both entities")
-    rivalry_entity1.images = fetch_all_images(entity1)
-    rivalry_entity2.images = fetch_all_images(entity2)
-    logger.info(f"Found {len(rivalry_entity1.images)} images for {entity1.label}, {len(rivalry_entity2.images)} images for {entity2.label}")
+    # Fetch and download images for both entities from multiple sources
+    logger.info("Fetching and downloading images for both entities")
+    rivalry_entity1.images = fetch_all_images(entity1, settings.raw_sources_dir)
+    rivalry_entity2.images = fetch_all_images(entity2, settings.raw_sources_dir)
+    logger.info(f"Downloaded {len(rivalry_entity1.images)} images for {entity1.label}, {len(rivalry_entity2.images)} images for {entity2.label}")
     
     # ============================================================
     # BUILD BASE CONTEXT (Wikidata information + instructions)

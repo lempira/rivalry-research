@@ -3,6 +3,7 @@
 import logging
 import re
 import time
+from pathlib import Path
 from urllib.parse import quote, urljoin
 
 import httpx
@@ -10,6 +11,8 @@ from bs4 import BeautifulSoup
 
 from ..config import get_settings
 from ..models import EntityImage, WikidataEntity
+from .image_downloader import download_and_store_image
+from .utils import get_entity_directory
 
 logger = logging.getLogger(__name__)
 
@@ -327,10 +330,12 @@ def fetch_europeana_images(
 
 
 def fetch_all_images(
-    entity: WikidataEntity, max_per_source: int = 5
+    entity: WikidataEntity,
+    raw_sources_dir: Path,
+    max_per_source: int = 5
 ) -> list[EntityImage]:
     """
-    Fetch images from all configured sources.
+    Fetch and download images from all configured sources.
 
     Sources are fetched in priority order:
     1. Wikimedia Commons (P18) - canonical image
@@ -338,14 +343,20 @@ def fetch_all_images(
     3. Library of Congress - historical photos
     4. Europeana - European cultural heritage (if API key configured)
 
+    All images are downloaded and stored locally with metadata.
+
     Args:
         entity: WikidataEntity to fetch images for
+        raw_sources_dir: Directory for storing raw sources
         max_per_source: Maximum images per source (except Commons which returns all P18)
 
     Returns:
-        Deduplicated list of EntityImage objects, ordered by source priority
+        List of EntityImage objects with local_path populated
     """
-    logger.info(f"Fetching images for {entity.label} ({entity.id})")
+    logger.info(f"Fetching and downloading images for {entity.label} ({entity.id})")
+
+    raw_sources_dir = Path(raw_sources_dir)
+    entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
 
     all_images: list[EntityImage] = []
 
@@ -371,7 +382,48 @@ def fetch_all_images(
 
     # Deduplicate by URL
     deduped = _dedupe_by_url(all_images)
+    logger.info(f"Found {len(deduped)} unique images (after dedup)")
 
-    logger.info(f"Total images for {entity.id}: {len(deduped)} (after dedup)")
+    # Download all images
+    downloaded_images: list[EntityImage] = []
+    for img in deduped:
+        try:
+            logger.debug(f"Downloading {img.source} image: {img.url}")
+            
+            # Prepare metadata
+            metadata = {
+                "original_url": img.url,
+                "thumbnail_url": img.thumbnail_url,
+                "title": img.title,
+                "license": img.license,
+                "attribution": img.attribution,
+                "source": img.source,
+            }
+            
+            # Download and store
+            local_path, thumbnail_path, updated_metadata = download_and_store_image(
+                img.url,
+                entity_dir,
+                img.source,
+                metadata,
+                generate_thumbnail=True
+            )
+            
+            # Update image with local paths (relative to data/)
+            try:
+                img.local_path = str(local_path.relative_to(raw_sources_dir.parent))
+            except ValueError:
+                # If relative path fails, use absolute
+                img.local_path = str(local_path)
+            
+            downloaded_images.append(img)
+            logger.debug(f"Successfully downloaded to {img.local_path}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to download image from {img.url}: {e}")
+            # Skip images that fail to download
+            continue
 
-    return deduped
+    logger.info(f"Successfully downloaded {len(downloaded_images)}/{len(deduped)} images for {entity.id}")
+
+    return downloaded_images
