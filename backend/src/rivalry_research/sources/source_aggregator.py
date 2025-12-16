@@ -9,7 +9,11 @@ from ..storage import SourceDatabase
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
-from .utils import get_content_path, get_original_file_path
+from .utils import (
+    get_original_file_path,
+    get_entity_directory,
+    get_source_directory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,15 +130,19 @@ def _fetch_and_store_wikipedia(
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     source.content_hash = content_hash
 
+    # Get entity-organized directory structure
+    entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
+    source_dir, _ = get_source_directory(entity_dir, "wikipedia")
+
     # Save extracted text content to disk
-    content_path = get_content_path(raw_sources_dir, source.url, "txt")
+    content_path = source_dir / "content.txt"
     content_path.write_text(content, encoding="utf-8")
     source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
     logger.debug(f"Saved content to {content_path}")
 
     # Save original HTML file
-    html_path = get_original_file_path(raw_sources_dir, source.url, "html")
+    html_path = source_dir / "original.html"
     html_path.write_bytes(html_bytes)
     logger.debug(f"Saved original HTML to {html_path}")
 
@@ -187,15 +195,19 @@ def _fetch_and_store_scholar(
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
 
+        # Get entity-organized directory structure
+        entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
+        source_dir, counter = get_source_directory(entity_dir, "scholar")
+
         # Save extracted text content to disk
-        content_path = get_content_path(raw_sources_dir, source.url, "txt")
+        content_path = source_dir / "content.txt"
         content_path.write_text(content, encoding="utf-8")
         source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
         logger.debug(f"Saved Scholar content to {content_path}")
 
         # Save original PDF file
-        pdf_path = get_original_file_path(raw_sources_dir, source.url, "pdf")
+        pdf_path = source_dir / "original.pdf"
         pdf_path.write_bytes(pdf_bytes)
         logger.debug(f"Saved original PDF to {pdf_path}")
 
@@ -249,15 +261,19 @@ def _fetch_and_store_arxiv(
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         source.content_hash = content_hash
 
+        # Get entity-organized directory structure
+        entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
+        source_dir, counter = get_source_directory(entity_dir, "arxiv")
+
         # Save extracted text content to disk
-        content_path = get_content_path(raw_sources_dir, source.url, "txt")
+        content_path = source_dir / "content.txt"
         content_path.write_text(content, encoding="utf-8")
         source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
 
         logger.debug(f"Saved arXiv content to {content_path}")
 
         # Save original PDF file
-        pdf_path = get_original_file_path(raw_sources_dir, source.url, "pdf")
+        pdf_path = source_dir / "original.pdf"
         pdf_path.write_bytes(pdf_bytes)
         logger.debug(f"Saved original PDF to {pdf_path}")
 

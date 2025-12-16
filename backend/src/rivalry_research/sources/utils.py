@@ -95,6 +95,80 @@ def get_original_file_path(base_dir: Path, url: str, extension: str) -> Path:
     return content_dir / f"original.{extension}"
 
 
+def sanitize_entity_name(name: str, max_length: int = 50) -> str:
+    """
+    Sanitize entity name for use in directory names.
+    
+    Args:
+        name: Entity name (e.g., "Isaac Newton")
+        max_length: Maximum length for the name
+    
+    Returns:
+        Sanitized name safe for filesystem
+    """
+    # Replace spaces with underscores
+    sanitized = name.replace(' ', '_')
+    # Remove or replace invalid characters
+    sanitized = re.sub(r'[<>:"/\\|?*]', '_', sanitized)
+    # Remove control characters
+    sanitized = re.sub(r'[\x00-\x1f\x7f]', '', sanitized)
+    # Replace multiple underscores with single underscore
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Trim and limit length
+    sanitized = sanitized.strip('._')[:max_length]
+    return sanitized or "unknown"
+
+
+def get_entity_directory(base_dir: Path, entity_name: str, entity_id: str) -> Path:
+    """
+    Get directory for an entity's sources.
+    
+    Args:
+        base_dir: Base directory for raw sources
+        entity_name: Entity name (e.g., "Isaac Newton")
+        entity_id: Entity Wikidata ID (e.g., "Q935")
+    
+    Returns:
+        Path to entity directory (e.g., "Isaac_Newton_Q935/")
+    """
+    safe_name = sanitize_entity_name(entity_name)
+    entity_folder = f"{safe_name}_{entity_id}"
+    entity_dir = base_dir / entity_folder
+    entity_dir.mkdir(parents=True, exist_ok=True)
+    return entity_dir
+
+
+def get_source_directory(entity_dir: Path, source_type: str) -> tuple[Path, int]:
+    """
+    Get directory for a specific source within an entity directory.
+    
+    For wikipedia: returns entity_dir/wikipedia/
+    For scholar/arxiv: returns entity_dir/scholar_NNN/ with auto-incrementing counter
+    
+    Args:
+        entity_dir: Entity directory path
+        source_type: Source type ("wikipedia", "scholar", "arxiv")
+    
+    Returns:
+        Tuple of (source_dir, counter) where counter is 0 for wikipedia
+    """
+    # Wikipedia gets its own single directory
+    if source_type == "wikipedia":
+        source_dir = entity_dir / "wikipedia"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        return source_dir, 0
+    
+    # Scholar and arXiv get numbered directories
+    # Find next available number
+    counter = 1
+    while True:
+        source_dir = entity_dir / f"{source_type}_{counter:03d}"
+        if not source_dir.exists():
+            source_dir.mkdir(parents=True, exist_ok=True)
+            return source_dir, counter
+        counter += 1
+
+
 def get_iso_timestamp() -> str:
     """
     Get current timestamp in ISO format.
