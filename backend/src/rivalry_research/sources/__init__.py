@@ -2,7 +2,13 @@
 
 from .credibility import calculate_credibility_score, is_primary_source
 from .image_fetcher import fetch_all_images
-from .source_aggregator import fetch_sources_for_entity
+from .source_aggregator import fetch_sources_for_entity, process_existing_sources
+from .source_scanner import (
+    scan_raw_sources_directory,
+    detect_unprocessed_sources,
+    validate_manual_source,
+    get_source_statistics,
+)
 from .validation import (
     calculate_event_confidence,
     compute_sources_summary,
@@ -18,6 +24,11 @@ __all__ = [
     "fetch_scholar_sources",
     "fetch_arxiv_sources",
     "fetch_sources_for_entity",
+    "process_existing_sources",
+    "scan_raw_sources_directory",
+    "detect_unprocessed_sources",
+    "validate_manual_source",
+    "get_source_statistics",
     "fetch_all_images",
     "calculate_credibility_score",
     "is_primary_source",

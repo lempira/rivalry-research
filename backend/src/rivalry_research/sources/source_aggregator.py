@@ -9,10 +9,14 @@ from ..storage import SourceDatabase
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
+from .pdf_extractor import extract_pdf_text
+from .source_scanner import detect_unprocessed_sources
 from .utils import (
     get_original_file_path,
     get_entity_directory,
     get_source_directory,
+    generate_source_id,
+    get_iso_timestamp,
 )
 
 logger = logging.getLogger(__name__)
@@ -293,4 +297,168 @@ def _fetch_and_store_arxiv(
         logger.info(f"Stored arXiv source: {source.source_id} - {source.title}")
 
     return stored_results
+
+
+def process_existing_sources(
+    db: SourceDatabase,
+    raw_sources_dir: Path,
+    entity_filter: str | None = None,
+) -> list[tuple[Source, str]]:
+    """
+    Process sources that already exist on disk (manual or previously fetched).
+    
+    This function scans the raw_sources directory for sources that are not yet
+    in the database, extracts their content, and adds them to the database.
+    
+    Args:
+        db: SourceDatabase instance
+        raw_sources_dir: Directory to scan for sources
+        entity_filter: Optional entity ID to process only that entity's sources
+    
+    Returns:
+        List of (Source, content) tuples for newly processed sources
+    """
+    raw_sources_dir = Path(raw_sources_dir)
+    
+    logger.info(f"Scanning for unprocessed sources in {raw_sources_dir}")
+    
+    # Detect unprocessed sources
+    unprocessed_sources = detect_unprocessed_sources(
+        raw_sources_dir, db, entity_filter
+    )
+    
+    if not unprocessed_sources:
+        logger.info("No unprocessed sources found")
+        return []
+    
+    logger.info(f"Found {len(unprocessed_sources)} unprocessed sources")
+    
+    processed_results: list[tuple[Source, str]] = []
+    
+    for source_meta in unprocessed_sources:
+        try:
+            result = _process_single_source(db, raw_sources_dir, source_meta)
+            if result:
+                processed_results.append(result)
+        except Exception as e:
+            logger.error(
+                f"Failed to process source {source_meta.get('source_dir')}: {e}"
+            )
+            continue
+    
+    logger.info(f"Successfully processed {len(processed_results)} sources")
+    return processed_results
+
+
+def _process_single_source(
+    db: SourceDatabase,
+    raw_sources_dir: Path,
+    source_meta: dict,
+) -> tuple[Source, str] | None:
+    """
+    Process a single source from metadata.
+    
+    Args:
+        db: SourceDatabase instance
+        raw_sources_dir: Base directory for raw sources
+        source_meta: Metadata dictionary from source scanner
+    
+    Returns:
+        Tuple of (Source, content) if successful, None otherwise
+    """
+    source_dir = Path(source_meta["source_dir"])
+    original_file = Path(source_meta["original_file"])
+    file_type = source_meta["file_type"]
+    
+    logger.info(f"Processing source: {source_dir.name}")
+    
+    # Extract content
+    content = _extract_content_from_file(original_file, file_type, source_dir)
+    
+    if not content or len(content.strip()) < 50:
+        logger.warning(f"Content too short or empty for {source_dir}")
+        return None
+    
+    # Calculate content hash
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    
+    # Create Source object
+    source_id = generate_source_id(source_meta["pseudo_url"])
+    
+    # Determine if this is a manual source based on directory name
+    is_manual = source_dir.name.startswith("manual")
+    
+    # Determine source type
+    if source_dir.name == "wikipedia":
+        source_type = "wikipedia"
+    elif source_dir.name.startswith("scholar"):
+        source_type = "academic_paper"
+    elif source_dir.name.startswith("arxiv"):
+        source_type = "academic_paper"
+    elif is_manual:
+        source_type = "manual"
+    else:
+        source_type = "unknown"
+    
+    source = Source(
+        source_id=source_id,
+        type=source_type,
+        title=f"Manual source: {source_dir.name}",
+        url=source_meta["pseudo_url"],
+        retrieved_at=get_iso_timestamp(),
+        content_hash=content_hash,
+        is_manual=is_manual,
+    )
+    
+    # Save content.txt if it doesn't exist
+    content_txt = source_dir / "content.txt"
+    if not content_txt.exists():
+        content_txt.write_text(content, encoding="utf-8")
+        logger.debug(f"Saved extracted content to {content_txt}")
+    
+    # Set stored content path (relative to data/)
+    try:
+        rel_path = content_txt.relative_to(raw_sources_dir.parent)
+        source.stored_content_path = str(rel_path)
+    except ValueError:
+        # If relative path fails, use absolute
+        source.stored_content_path = str(content_txt)
+    
+    # Add to database
+    source = db.add_source(source)
+    logger.info(f"Added source to database: {source.source_id} - {source.title}")
+    
+    return source, content
+
+
+def _extract_content_from_file(
+    original_file: Path, file_type: str, source_dir: Path
+) -> str:
+    """
+    Extract text content from a source file.
+    
+    Args:
+        original_file: Path to original file (PDF or HTML)
+        file_type: File type ("pdf" or "html")
+        source_dir: Source directory path
+    
+    Returns:
+        Extracted text content
+    """
+    # Check if content.txt already exists
+    content_txt = source_dir / "content.txt"
+    if content_txt.exists():
+        logger.debug(f"Reading existing content.txt from {content_txt}")
+        return content_txt.read_text(encoding="utf-8")
+    
+    # Extract based on file type
+    if file_type == "pdf":
+        logger.debug(f"Extracting text from PDF: {original_file}")
+        return extract_pdf_text(original_file)
+    elif file_type == "html":
+        logger.debug(f"Reading HTML file: {original_file}")
+        # For HTML, just read the file content
+        return original_file.read_text(encoding="utf-8")
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
 
