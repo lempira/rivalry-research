@@ -2,6 +2,17 @@
 
 from .credibility import calculate_credibility_score, is_primary_source
 from .image_fetcher import fetch_all_images
+from .image_scanner import (
+    scan_entity_images,
+    load_entity_images,
+    get_image_statistics,
+    validate_all_images,
+    list_entities_with_images,
+)
+from .image_downloader import (
+    download_and_store_image,
+    validate_image_file,
+)
 from .source_aggregator import fetch_sources_for_entity, process_existing_sources
 from .source_scanner import (
     scan_raw_sources_directory,
@@ -30,6 +41,13 @@ __all__ = [
     "validate_manual_source",
     "get_source_statistics",
     "fetch_all_images",
+    "scan_entity_images",
+    "load_entity_images",
+    "get_image_statistics",
+    "validate_all_images",
+    "list_entities_with_images",
+    "download_and_store_image",
+    "validate_image_file",
     "calculate_credibility_score",
     "is_primary_source",
     "calculate_event_confidence",

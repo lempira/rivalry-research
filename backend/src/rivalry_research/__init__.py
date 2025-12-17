@@ -5,6 +5,7 @@ import logging
 import logfire
 
 from .models import (
+    EntityImage,
     EntitySearchResult,
     Relationship,
     RivalryAnalysis,
@@ -42,6 +43,7 @@ __all__ = [
     # Models
     "EntitySearchResult",
     "WikidataEntity",
+    "EntityImage",
     "Relationship",
     "RivalryEntity",
     "RivalryAnalysis",
@@ -125,11 +127,11 @@ def analyze_rivalry(entity_id1: str, entity_id2: str, save_output: bool = True) 
     all_sources_list = [t[0] for t in all_source_tuples]
     
     # Count sources by origin
-    manual_count = sum(1 for s in all_sources_list if s.is_manual)
-    auto_count = len(all_sources_list) - manual_count
+    manual_sources = sum(1 for s in all_sources_list if s.is_manual)
+    auto_sources = len(all_sources_list) - manual_sources
     
     logger.info(f"Collected {len(all_sources_list)} total sources")
-    logger.info(f"Source breakdown: {manual_count} manual, {auto_count} auto-fetched")
+    logger.info(f"Source breakdown: {manual_sources} manual, {auto_sources} auto-fetched")
     
     # Upload content to File Search
     logger.info("Uploading source content to File Search store")

@@ -8,6 +8,9 @@ Analyze rivalrous relationships between people using Wikidata's knowledge graph 
 - Extract relationships between entities using SPARQL
 - AI-powered rivalry analysis with structured output
 - Automatic source fetching and deduplication (SQLite)
+- **Hybrid source management** - Auto-fetch + manual sources
+- **Image downloading and storage** - Auto-downloads from Commons, Wikipedia, LoC, Europeana
+- **Manual image support** - Add your own images with metadata
 - Source credibility scoring and validation
 - Persistent analysis storage with full citation tracking
 - Support for multiple AI providers (Gemini, OpenAI, Anthropic)
@@ -73,6 +76,33 @@ rivalry sources validate
 rivalry sources stats
 ```
 
+### Image Management
+
+Manage entity images (auto-downloaded and manual):
+
+```bash
+# List images for an entity
+rivalry images list --entity Q9021
+
+# List all entities with images
+rivalry images list --all
+
+# Add a manual image
+rivalry images add Q9021 photo.jpg \
+  --title "Planck in laboratory" \
+  --license "public_domain"
+
+# Validate images
+rivalry images validate --entity Q9021
+
+# View statistics
+rivalry images stats
+rivalry images stats --entity Q9021
+
+# Get detailed info about specific image
+rivalry images info Q9021 manual_001
+```
+
 ### File Search Management
 
 Monitor File Search stores:
@@ -112,15 +142,28 @@ Analyses and sources are saved with support for both auto-fetched and manual sou
 ```
 data/
 ├── sources.db              # SQLite - deduplicated sources with is_manual flag
-├── raw_sources/            # Original content (HTML, PDF, text)
+├── raw_sources/            # Original content (HTML, PDF, text, images)
 │   └── Max_Planck_Q9021/
 │       ├── wikipedia/      # Auto-fetched Wikipedia content
 │       ├── scholar_001/    # Auto-fetched Scholar papers
 │       ├── arxiv_001/      # Auto-fetched arXiv papers
-│       └── manual_001/     # Manually added sources
-│           ├── original.pdf
-│           ├── content.txt (auto-generated)
-│           └── metadata.json (optional)
+│       ├── manual_001/     # Manually added sources
+│       │   ├── original.pdf
+│       │   ├── content.txt (auto-generated)
+│       │   └── metadata.json (optional)
+│       └── images/         # Entity images (auto-downloaded + manual)
+│           ├── commons_001/
+│           │   ├── image.jpg
+│           │   ├── thumbnail.jpg
+│           │   └── metadata.json
+│           ├── wikipedia_001/
+│           │   ├── image.png
+│           │   ├── thumbnail.jpg
+│           │   └── metadata.json
+│           └── manual_001/
+│               ├── image.jpg
+│               ├── thumbnail.jpg
+│               └── metadata.json
 └── analyses/               # Analysis outputs (JSON)
     └── Q935_Q9047/
         └── analysis.json
@@ -164,6 +207,26 @@ rivalry sources process --all
 
 # 3. Run analysis
 python -m rivalry_research analyze Q9021 Q93996
+```
+
+### Working with Images
+
+```bash
+# Images are automatically downloaded during analysis
+
+# Add manual images
+rivalry images add Q9021 portrait.jpg \
+  --title "Max Planck Portrait" \
+  --license "public_domain"
+
+# List all images
+rivalry images list --entity Q9021
+
+# Validate images
+rivalry images validate --entity Q9021
+
+# View statistics
+rivalry images stats
 ```
 
 ## Development

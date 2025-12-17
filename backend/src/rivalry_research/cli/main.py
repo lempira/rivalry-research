@@ -2,7 +2,7 @@
 
 import typer
 
-from . import clean, fs, sources
+from . import clean, fs, sources, images
 
 app = typer.Typer(
     name="rivalry",
@@ -14,6 +14,7 @@ app = typer.Typer(
 app.add_typer(clean.app, name="clean", help="Data cleanup commands")
 app.add_typer(fs.app, name="fs", help="File Search management commands")
 app.add_typer(sources.app, name="sources", help="Source management commands")
+app.add_typer(images.app, name="images", help="Image management commands")
 
 
 if __name__ == "__main__":

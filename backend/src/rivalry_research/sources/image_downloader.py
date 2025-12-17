@@ -2,19 +2,18 @@
 
 import json
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import httpx
 from PIL import Image
 
-from ..sources.utils import sanitize_entity_name
-
 logger = logging.getLogger(__name__)
 
 # Download settings
 DOWNLOAD_TIMEOUT = 30.0
-MAX_IMAGE_SIZE_MB = 10
+MAX_IMAGE_SIZE_MB = 25
 USER_AGENT = "RivalryResearch/0.1.0 (https://github.com/user/rivalry-research)"
 
 # Thumbnail settings
@@ -31,6 +30,9 @@ def download_and_store_image(
     """
     Download an image and store it locally with metadata.
     
+    If download fails, still saves metadata with error info so we know what was attempted.
+    If both download and metadata save fail, no directory is created.
+    
     Args:
         image_url: URL of the image to download
         entity_dir: Entity directory (e.g., data/raw_sources/Max_Planck_Q9021)
@@ -46,46 +48,80 @@ def download_and_store_image(
     """
     logger.info(f"Downloading image from {image_url}")
     
-    # Create images directory
+    # Prepare directory paths (don't create yet)
     images_dir = entity_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     
     # Find next available directory number for this source type
     source_dir = _get_next_image_directory(images_dir, source_type)
+    
+    # Try to download image first (before creating directory)
+    download_error = None
+    image_bytes = None
+    try:
+        image_bytes = _download_image(image_url)
+    except Exception as e:
+        download_error = str(e)
+        logger.warning(f"Download failed: {e}")
+    
+    # Create directory only if we have something to save
     source_dir.mkdir(parents=True, exist_ok=True)
     
-    # Download image
-    image_bytes = _download_image(image_url)
-    
-    # Determine format and save
-    image_format = _detect_image_format(image_bytes)
-    image_filename = f"image.{image_format}"
-    image_path = source_dir / image_filename
-    
-    image_path.write_bytes(image_bytes)
-    logger.debug(f"Saved image to {image_path}")
-    
-    # Generate thumbnail if requested
+    # If download succeeded, save image and thumbnail
+    image_path = None
     thumbnail_path = None
-    if generate_thumbnail:
+    if image_bytes is not None:
+        # Determine format and save
+        image_format = _detect_image_format(image_bytes)
+        image_filename = f"image.{image_format}"
+        image_path = source_dir / image_filename
+        
+        image_path.write_bytes(image_bytes)
+        logger.debug(f"Saved image to {image_path}")
+        
+        # Generate thumbnail if requested
+        if generate_thumbnail:
+            try:
+                thumbnail_path = _generate_thumbnail(image_path, source_dir)
+                logger.debug(f"Generated thumbnail at {thumbnail_path}")
+            except Exception as e:
+                logger.warning(f"Failed to generate thumbnail: {e}")
+        
+        # Update metadata with file info
+        metadata.update({
+            "file_size_bytes": len(image_bytes),
+            "image_format": image_format,
+            "local_filename": image_filename,
+        })
+    else:
+        # Download failed - save error info in metadata
+        metadata.update({
+            "download_failed": True,
+            "error": download_error,
+            "attempted_url": image_url,
+        })
+    
+    # Save metadata (even if download failed)
+    try:
+        metadata_path = source_dir / "metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
+        logger.debug(f"Saved metadata to {metadata_path}")
+    except Exception as e:
+        # If metadata save also fails, remove the directory and re-raise
+        logger.error(f"Failed to save metadata: {e}")
         try:
-            thumbnail_path = _generate_thumbnail(image_path, source_dir)
-            logger.debug(f"Generated thumbnail at {thumbnail_path}")
-        except Exception as e:
-            logger.warning(f"Failed to generate thumbnail: {e}")
+            if source_dir.exists():
+                import shutil
+                shutil.rmtree(source_dir)
+                logger.debug(f"Removed directory {source_dir} after metadata save failed")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to cleanup directory: {cleanup_error}")
+        raise Exception(f"Failed to save metadata: {e}")
     
-    # Update metadata with file info
-    metadata.update({
-        "file_size_bytes": len(image_bytes),
-        "image_format": image_format,
-        "local_filename": image_filename,
-    })
-    
-    # Save metadata
-    metadata_path = source_dir / "metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-    logger.debug(f"Saved metadata to {metadata_path}")
+    # If download failed, re-raise the original exception
+    if download_error:
+        raise Exception(f"Failed to download image: {download_error}")
     
     return image_path, thumbnail_path, metadata
 
@@ -279,8 +315,4 @@ def validate_image_file(image_path: Path) -> tuple[bool, str]:
         return True, "Valid"
     except Exception as e:
         return False, f"Invalid image file: {e}"
-
-
-# Need to import BytesIO for image format detection
-from io import BytesIO
 
