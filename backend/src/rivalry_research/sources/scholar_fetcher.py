@@ -169,13 +169,13 @@ def fetch_scholar_sources(
     candidates_checked = 0
 
     try:
-        # Construct search query with biographical focus
+        # Construct search query with rivalry/dispute focus
         search_query = f'"{entity.label}"'
         if entity.description:
             search_query += f" {entity.description}"
         
-        # Add biographical keywords to prioritize biographical/historical content
-        search_query += " (biography OR life OR career OR obituary OR biographical)"
+        # Add rivalry keywords to prioritize sources about disputes and conflicts
+        search_query += " (dispute OR controversy OR conflict OR debate OR priority dispute OR disagreement OR rivalry OR criticism OR opposition)"
 
         logger.debug(f"Scholar search query: {search_query}")
 
