@@ -9,29 +9,18 @@ import arxiv
 from ..models import WikidataEntity, Source
 from .utils import generate_source_id, get_iso_timestamp
 from .pdf_extractor import extract_text_from_pdf
+from .source_fetcher_utils import (
+    RateLimiter,
+    build_metadata_header,
+    build_search_query,
+    is_entity_author,
+    RIVALRY_KEYWORDS,
+)
 
 logger = logging.getLogger(__name__)
 
-
-def _is_primary_source(paper: arxiv.Result, entity: WikidataEntity) -> bool:
-    """
-    Determine if a paper is a primary source (written by the entity).
-
-    Args:
-        paper: arXiv paper result
-        entity: WikidataEntity being researched
-
-    Returns:
-        True if entity is an author
-    """
-    entity_name_lower = entity.label.lower()
-
-    for author in paper.authors:
-        author_lower = author.name.lower()
-        if entity_name_lower in author_lower or author_lower in entity_name_lower:
-            return True
-
-    return False
+# Rate limiting
+_rate_limiter = RateLimiter(1.0, "arXiv")
 
 
 def _format_paper_content(paper: arxiv.Result, entity: WikidataEntity, full_text: str) -> str:
@@ -50,21 +39,21 @@ def _format_paper_content(paper: arxiv.Result, entity: WikidataEntity, full_text
     year_str = paper.published.strftime("%Y") if paper.published else "Unknown"
     categories = ", ".join(paper.categories) if paper.categories else "Unknown"
 
-    metadata_header = f"""---
-Source: arXiv
-Type: Academic Paper (Preprint)
-Title: {paper.title}
-Authors: {authors_str}
-Year: {year_str}
-Categories: {categories}
-arXiv ID: {paper.entry_id}
-URL: {paper.pdf_url}
-Related Entity: {entity.label} ({entity.id})
----
+    header = build_metadata_header(
+        "arXiv",
+        entity,
+        {
+            "Type": "Academic Paper (Preprint)",
+            "Title": paper.title,
+            "Authors": authors_str,
+            "Year": year_str,
+            "Categories": categories,
+            "arXiv ID": paper.entry_id,
+            "URL": paper.pdf_url,
+        }
+    )
 
-"""
-
-    document = f"{metadata_header}# {paper.title}\n\n"
+    document = f"{header}# {paper.title}\n\n"
     document += f"**Authors:** {authors_str}\n\n"
     document += f"**Published:** {year_str}\n\n"
     document += f"**Categories:** {categories}\n\n"
@@ -97,13 +86,7 @@ def fetch_arxiv_sources(
 
     try:
         # Construct search query with rivalry/dispute focus
-        search_query = f'"{entity.label}"'
-        if entity.description:
-            search_query += f" {entity.description}"
-        
-        # Add rivalry keywords to prioritize sources about disputes and conflicts
-        search_query += " (dispute OR controversy OR conflict OR debate OR priority dispute OR disagreement OR rivalry OR criticism OR opposition)"
-
+        search_query = build_search_query(entity, RIVALRY_KEYWORDS)
         logger.debug(f"arXiv search query: {search_query}")
 
         client = arxiv.Client()
@@ -115,6 +98,7 @@ def fetch_arxiv_sources(
 
         for paper in client.results(search):
             try:
+                _rate_limiter.wait()
                 logger.debug(f"Downloading PDF for '{paper.title}'")
 
                 # Download PDF to temp file and extract text
@@ -138,7 +122,7 @@ def fetch_arxiv_sources(
                     logger.debug(f"Skipping '{paper.title}': extracted text too short")
                     continue
 
-                is_primary = _is_primary_source(paper, entity)
+                is_primary = is_entity_author(entity, [author.name for author in paper.authors])
 
                 source = Source(
                     source_id=generate_source_id(paper.entry_id, "arxiv"),

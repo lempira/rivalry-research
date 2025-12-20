@@ -29,6 +29,22 @@ from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
 from .pdf_extractor import download_pdf, extract_text_from_pdf, extract_pdf_text, fetch_pdf_content, PDFExtractionResult
+from .source_fetcher_utils import (
+    RateLimiter,
+    is_entity_author,
+    build_metadata_header,
+    clean_html_to_text,
+    build_search_query,
+    RIVALRY_KEYWORDS,
+    BIOGRAPHICAL_KEYWORDS,
+    is_mathematician,
+    is_philosopher,
+    is_scientist,
+    has_occupation,
+    MATHEMATICIAN_OCCUPATIONS,
+    PHILOSOPHER_OCCUPATIONS,
+    SCIENTIST_OCCUPATIONS,
+)
 
 __all__ = [
     "fetch_wikipedia_source",
@@ -58,5 +74,20 @@ __all__ = [
     "extract_pdf_text",
     "fetch_pdf_content",
     "PDFExtractionResult",
+    # Source fetcher utilities
+    "RateLimiter",
+    "is_entity_author",
+    "build_metadata_header",
+    "clean_html_to_text",
+    "build_search_query",
+    "RIVALRY_KEYWORDS",
+    "BIOGRAPHICAL_KEYWORDS",
+    "is_mathematician",
+    "is_philosopher",
+    "is_scientist",
+    "has_occupation",
+    "MATHEMATICIAN_OCCUPATIONS",
+    "PHILOSOPHER_OCCUPATIONS",
+    "SCIENTIST_OCCUPATIONS",
 ]
 

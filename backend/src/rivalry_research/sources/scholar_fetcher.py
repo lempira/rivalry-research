@@ -1,7 +1,6 @@
 """Fetch academic papers from Google Scholar."""
 
 import logging
-import time
 from typing import Any
 
 from scholarly import scholarly
@@ -9,22 +8,18 @@ from scholarly import scholarly
 from ..models import WikidataEntity, Source
 from .utils import generate_source_id, get_iso_timestamp
 from .pdf_extractor import fetch_pdf_content
+from .source_fetcher_utils import (
+    RateLimiter,
+    build_metadata_header,
+    build_search_query,
+    is_entity_author,
+    RIVALRY_KEYWORDS,
+)
 
 logger = logging.getLogger(__name__)
 
-# Rate limiting for Scholar
-_last_request_time = 0.0
-_min_request_interval = 2.0  # 2 seconds between requests to avoid rate limiting
-
-
-def _rate_limit() -> None:
-    """Enforce rate limiting between Scholar requests."""
-    global _last_request_time
-    now = time.time()
-    time_since_last = now - _last_request_time
-    if time_since_last < _min_request_interval:
-        time.sleep(_min_request_interval - time_since_last)
-    _last_request_time = time.time()
+# Rate limiting
+_rate_limiter = RateLimiter(2.0, "Scholar")
 
 
 def _extract_paper_metadata(paper: dict[str, Any]) -> dict[str, Any]:
@@ -81,28 +76,6 @@ def _extract_paper_metadata(paper: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_primary_source(paper_metadata: dict[str, Any], entity: WikidataEntity) -> bool:
-    """
-    Determine if a paper is a primary source (written by the entity).
-    
-    Args:
-        paper_metadata: Extracted paper metadata
-        entity: WikidataEntity being researched
-    
-    Returns:
-        True if entity is an author
-    """
-    entity_name_lower = entity.label.lower()
-    
-    for author in paper_metadata["authors"]:
-        author_lower = author.lower()
-        # Check if entity name appears in author name
-        if entity_name_lower in author_lower or author_lower in entity_name_lower:
-            return True
-    
-    return False
-
-
 def _format_paper_content(
     paper_metadata: dict[str, Any], entity: WikidataEntity, full_text: str
 ) -> str:
@@ -121,21 +94,21 @@ def _format_paper_content(
     venue_str = paper_metadata["venue"] or "Unknown"
     authors_str = ", ".join(paper_metadata["authors"]) if paper_metadata["authors"] else "Unknown"
 
-    metadata_header = f"""---
-Source: Google Scholar
-Type: Academic Paper
-Title: {paper_metadata["title"]}
-Authors: {authors_str}
-Year: {year_str}
-Venue: {venue_str}
-URL: {paper_metadata["url"]}
-Citations: {paper_metadata["num_citations"]}
-Related Entity: {entity.label} ({entity.id})
----
+    header = build_metadata_header(
+        "Google Scholar",
+        entity,
+        {
+            "Type": "Academic Paper",
+            "Title": paper_metadata["title"],
+            "Authors": authors_str,
+            "Year": year_str,
+            "Venue": venue_str,
+            "URL": paper_metadata["url"],
+            "Citations": paper_metadata["num_citations"],
+        }
+    )
 
-"""
-
-    document = f"{metadata_header}# {paper_metadata['title']}\n\n"
+    document = f"{header}# {paper_metadata['title']}\n\n"
     document += f"**Authors:** {authors_str}\n\n"
     document += f"**Published:** {year_str}"
     if venue_str != "Unknown":
@@ -170,22 +143,16 @@ def fetch_scholar_sources(
 
     try:
         # Construct search query with rivalry/dispute focus
-        search_query = f'"{entity.label}"'
-        if entity.description:
-            search_query += f" {entity.description}"
-        
-        # Add rivalry keywords to prioritize sources about disputes and conflicts
-        search_query += " (dispute OR controversy OR conflict OR debate OR priority dispute OR disagreement OR rivalry OR criticism OR opposition)"
-
+        search_query = build_search_query(entity, RIVALRY_KEYWORDS)
         logger.debug(f"Scholar search query: {search_query}")
 
-        _rate_limit()
+        _rate_limiter.wait()
         search_results = scholarly.search_pubs(search_query)
 
         # Check candidates until we have max_results with full text
         while len(sources) < max_results and candidates_checked < max_candidates:
             try:
-                _rate_limit()
+                _rate_limiter.wait()
                 paper = next(search_results)
                 candidates_checked += 1
 
@@ -215,7 +182,7 @@ def fetch_scholar_sources(
                     logger.debug(f"Skipping '{metadata['title']}': extracted text too short")
                     continue
 
-                is_primary = _is_primary_source(metadata, entity)
+                is_primary = is_entity_author(entity, metadata["authors"])
 
                 source = Source(
                     source_id=generate_source_id(metadata["url"], "scholar"),

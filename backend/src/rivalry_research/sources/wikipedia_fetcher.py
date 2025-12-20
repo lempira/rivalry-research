@@ -1,15 +1,17 @@
 """Fetch Wikipedia article content for entities."""
 
 import logging
-import re
-import time
 from urllib.parse import unquote, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 
 from ..models import WikidataEntity, Source
 from .utils import generate_source_id, get_iso_timestamp
+from .source_fetcher_utils import (
+    RateLimiter,
+    build_metadata_header,
+    clean_html_to_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +22,7 @@ WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
 USER_AGENT = "RivalryResearch/0.1.0 (https://github.com/user/rivalry-research)"
 
 # Rate limiting
-_last_request_time = 0.0
-_min_request_interval = 0.5  # 500ms between requests (2 req/sec max per Wikipedia guidelines)
-
-
-def _rate_limit() -> None:
-    """Enforce rate limiting between Wikipedia requests."""
-    global _last_request_time
-    now = time.time()
-    time_since_last = now - _last_request_time
-    if time_since_last < _min_request_interval:
-        time.sleep(_min_request_interval - time_since_last)
-    _last_request_time = time.time()
+_rate_limiter = RateLimiter(0.5, "Wikipedia")
 
 
 def _extract_article_title_from_url(wikipedia_url: str) -> str:
@@ -51,41 +42,6 @@ def _extract_article_title_from_url(wikipedia_url: str) -> str:
     raise ValueError(f"Invalid Wikipedia URL format: {wikipedia_url}")
 
 
-def _clean_html_to_text(html: str) -> str:
-    """
-    Convert Wikipedia HTML to clean plain text.
-    
-    Args:
-        html: Raw HTML content from Wikipedia
-    
-    Returns:
-        Clean plain text
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    
-    # Remove script and style elements
-    for element in soup(["script", "style", "sup"]):
-        element.decompose()
-    
-    # Remove reference links [1], [2], etc.
-    for element in soup.find_all("span", class_="reference-text"):
-        element.decompose()
-    
-    # Get text and clean up whitespace
-    text = soup.get_text()
-    
-    # Remove citation brackets
-    text = re.sub(r"\[\d+\]", "", text)
-    
-    # Clean up multiple newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    
-    # Clean up spaces
-    text = re.sub(r" {2,}", " ", text)
-    
-    return text.strip()
-
-
 def fetch_wikipedia_content(
     wikipedia_url: str, timeout: float = 30.0
 ) -> tuple[str, str, str]:
@@ -103,7 +59,7 @@ def fetch_wikipedia_content(
         httpx.HTTPError: If the request fails
         ValueError: If the URL is invalid or article not found
     """
-    _rate_limit()
+    _rate_limiter.wait()
     
     article_title = _extract_article_title_from_url(wikipedia_url)
     
@@ -131,7 +87,11 @@ def fetch_wikipedia_content(
             raise ValueError(f"Invalid Wikipedia API response for article: {article_title}")
         
         html_content = data["parse"]["text"]["*"]
-        clean_text = _clean_html_to_text(html_content)
+        clean_text = clean_html_to_text(
+            html_content,
+            remove_tags=["sup"],
+            remove_classes=["reference-text"]
+        )
         
         return article_title, clean_text, html_content
 
@@ -150,18 +110,19 @@ def format_as_document(
     Returns:
         Formatted document with metadata header
     """
-    metadata_header = f"""---
-Source: Wikipedia
-Article: {article_title}
-Entity ID: {entity.id}
-Entity Name: {entity.label}
-URL: {entity.wikipedia_url or 'N/A'}
-Description: {entity.description or 'N/A'}
----
-
-"""
+    header = build_metadata_header(
+        "Wikipedia",
+        entity,
+        {
+            "Article": article_title,
+            "Entity ID": entity.id,
+            "Entity Name": entity.label,
+            "URL": entity.wikipedia_url or 'N/A',
+            "Description": entity.description or 'N/A',
+        }
+    )
     
-    return metadata_header + article_text
+    return header + article_text
 
 
 def fetch_wikipedia_source(entity: WikidataEntity, timeout: float = 30.0) -> tuple[Source, str, bytes]:
