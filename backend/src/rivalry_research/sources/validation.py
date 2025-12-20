@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from ..models import Source, EventSource, SourcesSummary
+from ..models import Source, EventSource, SourcesSummary, SourceTypeCount
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ def compute_sources_summary(sources: dict[str, Source]) -> SourcesSummary:
     if not sources:
         return SourcesSummary(
             total_sources=0,
-            by_type={},
+            by_type=[],
             primary_sources=0,
             secondary_sources=0,
             average_credibility=0.0,
@@ -113,9 +113,15 @@ def compute_sources_summary(sources: dict[str, Source]) -> SourcesSummary:
     sources_list = list(sources.values())
     
     # Count by type
-    by_type = {}
+    type_counts = {}
     for source in sources_list:
-        by_type[source.type] = by_type.get(source.type, 0) + 1
+        type_counts[source.type] = type_counts.get(source.type, 0) + 1
+    
+    # Convert to list of SourceTypeCount objects
+    by_type = [
+        SourceTypeCount(source_type=source_type, count=count)
+        for source_type, count in type_counts.items()
+    ]
     
     # Count primary vs secondary
     primary_count = sum(1 for s in sources_list if s.is_primary_source)
@@ -126,15 +132,14 @@ def compute_sources_summary(sources: dict[str, Source]) -> SourcesSummary:
     
     # Date range (if publication_date available)
     dates = [s.publication_date for s in sources_list if s.publication_date]
-    date_range = None
+    earliest_date = None
+    latest_date = None
     if dates:
         try:
             # Sort dates (handles YYYY and YYYY-MM-DD formats)
             sorted_dates = sorted(dates)
-            date_range = {
-                "earliest": sorted_dates[0],
-                "latest": sorted_dates[-1],
-            }
+            earliest_date = sorted_dates[0]
+            latest_date = sorted_dates[-1]
         except Exception as e:
             logger.debug(f"Could not compute date range: {e}")
     
@@ -144,6 +149,7 @@ def compute_sources_summary(sources: dict[str, Source]) -> SourcesSummary:
         primary_sources=primary_count,
         secondary_sources=secondary_count,
         average_credibility=round(avg_credibility, 2),
-        date_range=date_range,
+        earliest_date=earliest_date,
+        latest_date=latest_date,
     )
 

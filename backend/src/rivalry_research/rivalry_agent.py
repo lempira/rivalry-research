@@ -1,13 +1,14 @@
 """Pydantic-AI agent for analyzing rivalrous relationships."""
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from pydantic_ai import Agent, InstrumentationSettings
 
 from .config import get_settings
 from .logging_utils import format_entity_details
-from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source
+from .models import RivalryAnalysis, WikidataEntity, Relationship, RivalryEntity, Source, AnalysisMetadata
 from .rag.file_search_client import retrieve_relevant_documents
 from .sources import validate_event_sources, compute_sources_summary, fetch_all_images
 
@@ -196,7 +197,7 @@ For EACH event provide:
 - entity_id: Use entity1.id, entity2.id, or 'both'
 - rivalry_relevance: direct/parallel/context/resolution
 - sources (REQUIRED - separate from inline citations): Array of EventSource objects with:
-  * source_id: Reference to one of the available source IDs provided in context
+  * source_id: Reference to one of the available source IDs provided in context (e.g., "wiki_q935", "scholar_001")
   * supporting_text: The specific text from the source that supports this event
   * page_reference: Page number or section (if applicable)
   * NOTE: You MUST populate this array even when you include inline {source_id} markers in the description
@@ -240,11 +241,10 @@ Return a structured analysis with:
 - entity1, entity2: RivalryEntity objects with biographical data (required)
 - rivalry_exists, rivalry_score, rivalry_period_start, rivalry_period_end, summary (required)
 - timeline: rivalry-relevant events ONLY with rich descriptions, quotes, and EventSource references (required)
-- sources: Dictionary mapping source_id to Source objects (will be populated from available sources)
+- relationships: Direct Wikidata relationships between entities
 - Base all information on BOTH Wikidata and biographical document searches
 
-NOTE: The sources dictionary and sources_summary will be populated automatically from the available sources.
-You only need to reference sources by their source_id in the timeline events.
+NOTE: Reference sources by their source_id in timeline events. The sources catalog will be populated automatically.
 
 VALIDATION: Before returning, verify that EVERY event has:
 1. At least one {source_id} marker in the description text
@@ -375,6 +375,7 @@ def _format_sources_section(all_sources: dict[str, Source]) -> str:
         Formatted string with available sources or message if none
     """
     section = "\n\nAvailable Sources (for citation in timeline events):"
+    section += "\nReference these sources by their source_id in your timeline event sources.\n"
     
     if all_sources:
         section += "\n"
@@ -624,8 +625,8 @@ def analyze_rivalry(
     analysis.entity1.images = rivalry_entity1.images
     analysis.entity2.images = rivalry_entity2.images
 
-    # Post-process: Populate sources catalog
-    analysis.sources = all_sources
+    # Post-process: Populate sources (agent doesn't return these - excluded from schema)
+    analysis.sources = list(all_sources.values())
     
     # Post-process: Validate and enrich timeline events
     logger.info("Validating and enriching timeline event sources")
@@ -636,16 +637,19 @@ def analyze_rivalry(
         event.has_primary_source = validation["has_primary_source"]
         event.confidence = validation["confidence"]
     
-    # Compute sources summary
+    # Post-process: Compute and populate sources summary
     analysis.sources_summary = compute_sources_summary(all_sources)
     
-    # Add analysis metadata
-    analysis.analysis_metadata = {
-        "pipeline_version": "2.0",
-        "model_used": settings.rivalry_model,
-        "sources_searched": ["wikipedia"],
-        "total_sources": len(all_sources),
-    }
+    # Post-process: Add analysis metadata
+    analysis.analysis_metadata = AnalysisMetadata(
+        pipeline_version="2.0",
+        model_used=settings.rivalry_model,
+        sources_searched=["wikipedia"],
+        total_sources=len(all_sources),
+    )
+    
+    # Post-process: Set timestamp
+    analysis.analyzed_at = datetime.now()
     
     logger.info(
         f"Analysis complete with {len(all_sources)} sources, "

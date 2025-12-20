@@ -137,7 +137,7 @@ def main():
         # Show source information
         if analysis.sources:
             logger.info(f"\n📚 Sources ({len(analysis.sources)} total):")
-            for source_id, source in list(analysis.sources.items())[:5]:  # Show first 5
+            for source in analysis.sources[:5]:  # Show first 5
                 logger.info(f"  • {source.title}")
                 logger.info(f"    Type: {source.type}, Credibility: {source.credibility_score:.2f}")
             if len(analysis.sources) > 5:

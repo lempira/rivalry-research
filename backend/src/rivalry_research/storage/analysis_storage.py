@@ -97,14 +97,15 @@ def get_analysis_with_sources(
     """
     analysis = load_analysis(analysis_id, analyses_dir)
     
-    # If sources dict is empty or missing source details, hydrate from DB
+    # If sources list is present, hydrate from DB
     if analysis.sources:
-        source_ids = list(analysis.sources.keys())
-        hydrated_sources = db.get_sources_by_ids(source_ids)
+        # Extract source IDs from the list
+        source_ids = [source.source_id for source in analysis.sources]
+        hydrated_sources_dict = db.get_sources_by_ids(source_ids)
         
-        # Replace with hydrated sources
-        analysis.sources = hydrated_sources
-        logger.debug(f"Hydrated {len(hydrated_sources)} sources from database")
+        # Convert dict back to list
+        analysis.sources = list(hydrated_sources_dict.values())
+        logger.debug(f"Hydrated {len(analysis.sources)} sources from database")
     
     return analysis
 

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class EntitySearchResult(BaseModel):
@@ -173,12 +173,20 @@ class EventSource(BaseModel):
     )
 
 
+class SourceTypeCount(BaseModel):
+    """Count of sources by type."""
+    
+    source_type: str = Field(..., description="Type of source (wikipedia, academic_paper, etc.)")
+    count: int = Field(..., description="Number of sources of this type")
+
+
 class SourcesSummary(BaseModel):
     """Summary statistics about sources used in an analysis."""
 
     total_sources: int = Field(..., description="Total number of sources")
-    by_type: dict[str, int] = Field(
-        default_factory=dict, description="Count of sources by type"
+    by_type: list[SourceTypeCount] = Field(
+        default_factory=list, 
+        description="Count of sources by type as list of (type, count) pairs"
     )
     primary_sources: int = Field(default=0, description="Number of primary sources")
     secondary_sources: int = Field(default=0, description="Number of secondary sources")
@@ -188,10 +196,26 @@ class SourcesSummary(BaseModel):
         le=1.0,
         description="Average credibility score across all sources",
     )
-    date_range: dict[str, str] | None = Field(
+    earliest_date: str | None = Field(
         None,
-        description="Publication date range (earliest and latest) if available",
+        description="Earliest publication date if available",
     )
+    latest_date: str | None = Field(
+        None,
+        description="Latest publication date if available",
+    )
+
+
+class AnalysisMetadata(BaseModel):
+    """Metadata about the analysis process."""
+    
+    pipeline_version: str = Field(..., description="Version of the analysis pipeline")
+    model_used: str = Field(..., description="AI model used for analysis")
+    sources_searched: list[str] = Field(
+        default_factory=list,
+        description="Types of sources searched (e.g., wikipedia, scholar, arxiv)"
+    )
+    total_sources: int = Field(..., description="Total number of sources used")
 
 
 class RivalryAnalysis(BaseModel):
@@ -223,20 +247,30 @@ class RivalryAnalysis(BaseModel):
         default_factory=list,
         description="Direct Wikidata relationships between entities",
     )
-    sources: dict[str, Source] = Field(
-        default_factory=dict,
-        description="Source catalog - dictionary mapping source_id to full Source metadata",
+    sources: list[Source] = Field(
+        default_factory=list,
+        exclude=True,  # Populated in post-processing, not by agent
+        description="Source catalog - list of all Source metadata objects",
     )
     sources_summary: SourcesSummary | None = Field(
-        None, description="Summary statistics about sources used"
+        None,
+        exclude=True,  # Computed in post-processing
+        description="Summary statistics about sources used"
     )
-    analysis_metadata: dict[str, Any] = Field(
-        default_factory=dict,
+    analysis_metadata: AnalysisMetadata | None = Field(
+        None,
+        exclude=True,  # Populated in post-processing
         description="Metadata about the analysis process (model used, sources searched, etc.)",
     )
     analyzed_at: datetime = Field(
-        default_factory=datetime.now, description="Timestamp of analysis"
+        default_factory=datetime.now,
+        exclude=True,  # Set in post-processing
+        description="Timestamp of analysis"
     )
+    
+    def get_sources_dict(self) -> dict[str, Source]:
+        """Convert sources list to dictionary mapping source_id to Source."""
+        return {source.source_id: source for source in self.sources}
 
 
 class Citation(BaseModel):
