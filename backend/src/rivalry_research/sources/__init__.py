@@ -28,6 +28,7 @@ from .validation import (
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
+from .mactutor_fetcher import fetch_mactutor_source
 from .pdf_extractor import download_pdf, extract_text_from_pdf, extract_pdf_text, fetch_pdf_content, PDFExtractionResult
 from .source_fetcher_utils import (
     RateLimiter,
@@ -50,6 +51,7 @@ __all__ = [
     "fetch_wikipedia_source",
     "fetch_scholar_sources",
     "fetch_arxiv_sources",
+    "fetch_mactutor_source",
     "fetch_sources_for_entity",
     "process_existing_sources",
     "scan_raw_sources_directory",

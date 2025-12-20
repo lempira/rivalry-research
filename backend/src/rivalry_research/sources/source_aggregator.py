@@ -9,6 +9,7 @@ from ..storage import SourceDatabase
 from .wikipedia_fetcher import fetch_wikipedia_source
 from .scholar_fetcher import fetch_scholar_sources
 from .arxiv_fetcher import fetch_arxiv_sources
+from .mactutor_fetcher import fetch_mactutor_source
 from .pdf_extractor import extract_pdf_text
 from .source_scanner import detect_unprocessed_sources
 from .utils import (
@@ -28,6 +29,7 @@ def fetch_sources_for_entity(
     entity: WikidataEntity,
     max_scholar_results: int = 3,
     max_arxiv_results: int = 3,
+    fetch_mactutor: bool = True,
 ) -> list[tuple[Source, str]]:
     """
     Fetch all available sources for an entity.
@@ -36,13 +38,15 @@ def fetch_sources_for_entity(
     - Wikipedia (full text)
     - Google Scholar (full text PDFs only)
     - arXiv (full text PDFs)
+    - MacTutor (for mathematicians only)
 
     Args:
         db: SourceDatabase instance for deduplication
         raw_sources_dir: Directory to store raw source content
         entity: WikidataEntity to fetch sources for
-        max_scholar_results: Maximum number of Scholar papers to fetch (default: 5)
-        max_arxiv_results: Maximum number of arXiv papers to fetch (default: 5)
+        max_scholar_results: Maximum number of Scholar papers to fetch (default: 3)
+        max_arxiv_results: Maximum number of arXiv papers to fetch (default: 3)
+        fetch_mactutor: Fetch MacTutor biography for mathematicians (default: True)
 
     Returns:
         List of (Source, content) tuples
@@ -78,6 +82,15 @@ def fetch_sources_for_entity(
         sources_with_content.extend(arxiv_results)
     except Exception as e:
         logger.error(f"Failed to fetch arXiv for {entity.label}: {e}")
+
+    # Fetch MacTutor (mathematicians only)
+    if fetch_mactutor:
+        try:
+            mactutor_result = _fetch_and_store_mactutor(db, raw_sources_dir, entity)
+            if mactutor_result:
+                sources_with_content.append(mactutor_result)
+        except Exception as e:
+            logger.error(f"Failed to fetch MacTutor for {entity.label}: {e}")
 
     logger.info(f"Fetched {len(sources_with_content)} sources for {entity.label}")
     return sources_with_content
@@ -299,6 +312,74 @@ def _fetch_and_store_arxiv(
     return stored_results
 
 
+def _fetch_and_store_mactutor(
+    db: SourceDatabase,
+    raw_sources_dir: Path,
+    entity: WikidataEntity,
+) -> tuple[Source, str] | None:
+    """
+    Fetch MacTutor biography with deduplication and storage.
+
+    Args:
+        db: SourceDatabase instance
+        raw_sources_dir: Directory to store raw source content
+        entity: WikidataEntity to search for
+
+    Returns:
+        Tuple of (Source, content) or None if not found/applicable
+    """
+    # Fetch biography (returns None if not a mathematician or not found)
+    result = fetch_mactutor_source(entity)
+    if not result:
+        return None
+    
+    source, content, html_bytes = result
+    
+    # Check if URL already exists in database
+    existing = db.get_source_by_url(source.url)
+    if existing:
+        logger.info(f"MacTutor source already exists: {existing.source_id}")
+        
+        # Check if original HTML file exists, save it if missing
+        html_path = get_original_file_path(raw_sources_dir, existing.url, "html")
+        if not html_path.exists():
+            logger.info(f"Original HTML missing for {existing.source_id}, saving it")
+            html_path.write_bytes(html_bytes)
+            logger.debug(f"Saved original HTML to {html_path}")
+        
+        # Return existing source with fetched content
+        return existing, content
+    
+    # Calculate content hash
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    source.content_hash = content_hash
+    
+    # Mark as auto-fetched
+    source.is_manual = False
+    
+    # Get entity-organized directory structure
+    entity_dir = get_entity_directory(raw_sources_dir, entity.label, entity.id)
+    source_dir = entity_dir / "mactutor"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save extracted text content to disk
+    content_path = source_dir / "content.txt"
+    content_path.write_text(content, encoding="utf-8")
+    source.stored_content_path = str(content_path.relative_to(raw_sources_dir.parent))
+    logger.debug(f"Saved MacTutor content to {content_path}")
+    
+    # Save original HTML file
+    html_path = source_dir / "original.html"
+    html_path.write_bytes(html_bytes)
+    logger.debug(f"Saved original HTML to {html_path}")
+    
+    # Add to database
+    source = db.add_source(source)
+    logger.info(f"Stored MacTutor source: {source.source_id} - {source.title}")
+    
+    return source, content
+
+
 def process_existing_sources(
     db: SourceDatabase,
     raw_sources_dir: Path,
@@ -394,7 +475,9 @@ def _process_single_source(
     elif source_dir.name.startswith("scholar"):
         source_type = "academic_paper"
     elif source_dir.name.startswith("arxiv"):
-        source_type = "academic_paper"
+        source_type = "arxiv_paper"
+    elif source_dir.name == "mactutor":
+        source_type = "mactutor_biography"
     elif is_manual:
         source_type = "manual"
     else:
