@@ -289,6 +289,8 @@ def has_occupation(
     """
     Check if entity has any of the specified occupations.
     
+    Extracts occupation IDs from entity.claims['P106'] (occupation property).
+    
     Args:
         entity: WikidataEntity to check
         occupation_ids: Set of Wikidata occupation IDs
@@ -302,10 +304,25 @@ def has_occupation(
         >>> has_occupation(obama_entity, MATHEMATICIAN_OCCUPATIONS)
         False
     """
-    if not entity.occupation:
+    if not entity.claims or 'P106' not in entity.claims:
         return False
     
-    return any(occ_id in occupation_ids for occ_id in entity.occupation)
+    # Extract occupation entity IDs from P106 claims
+    entity_occupations = set()
+    for claim in entity.claims['P106']:
+        try:
+            mainsnak = claim.get('mainsnak', {})
+            datavalue = mainsnak.get('datavalue', {})
+            value = datavalue.get('value', {})
+            
+            # P106 values are wikibase-entityid references
+            if isinstance(value, dict) and 'id' in value:
+                entity_occupations.add(value['id'])
+        except (KeyError, AttributeError):
+            continue
+    
+    # Check for intersection with target occupations
+    return bool(entity_occupations & occupation_ids)
 
 
 def is_mathematician(entity: WikidataEntity) -> bool:
