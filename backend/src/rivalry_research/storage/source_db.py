@@ -241,6 +241,6 @@ class SourceDatabase:
             is_primary_source=bool(row["is_primary_source"]),
             stored_content_path=row["stored_content_path"],
             content_hash=row["content_hash"],
-            is_manual=bool(row.get("is_manual", 0)),
+            is_manual=bool(row["is_manual"]),
         )
 

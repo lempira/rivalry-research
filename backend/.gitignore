@@ -36,6 +36,9 @@ htmlcov/
 # Example outputs (JSON files only)
 examples/output/*.json
 
+# Example logs
+examples/logs/
+
 # Data directory (generated files)
 data/*
 !data/.gitkeep

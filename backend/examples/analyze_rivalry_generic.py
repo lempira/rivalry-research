@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 
 from rivalry_research import search_person, analyze_rivalry
@@ -39,6 +40,40 @@ def setup_logging(level: str):
     logging.getLogger('rivalry_research').setLevel(
         getattr(logging, level.upper())
     )
+
+
+def add_file_logging(entity1_id: str, entity2_id: str, level: str) -> Path:
+    """
+    Add file handler to log to a file with entity IDs and timestamp.
+    
+    Args:
+        entity1_id: First entity's Wikidata ID (e.g., 'Q935')
+        entity2_id: Second entity's Wikidata ID (e.g., 'Q9047')
+        level: Logging level for the file handler
+    
+    Returns:
+        Path to the created log file
+    """
+    # Create logs directory
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    # Create filename with entities and ISO timestamp
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    log_file = log_dir / f"{entity1_id}_{entity2_id}_{timestamp}.log"
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(getattr(logging, level.upper()))
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    ))
+    
+    # Add file handler to root logger (captures everything)
+    logging.getLogger().addHandler(file_handler)
+    
+    return log_file
 
 
 def main():
@@ -113,6 +148,10 @@ def main():
         for i, result in enumerate(results2[1:4], 2):
             logger.info(f"    {i}. {result.label} - {result.description}")
     logger.info("")
+    
+    # Add file logging now that we have both entity IDs
+    log_file = add_file_logging(person1.id, person2.id, args.log_level)
+    logger.info(f"📝 Logging to: {log_file}\n")
     
     # Analyze rivalry
     logger.info("Analyzing rivalry...\n")

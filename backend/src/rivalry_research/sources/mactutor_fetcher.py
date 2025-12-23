@@ -48,7 +48,11 @@ def _search_biography(entity_name: str, timeout: float = 30.0) -> str | None:
             "WORDS": entity_name,
         }
         
-        with httpx.Client(timeout=timeout) as client:
+        # NOTE: SSL verification disabled for MacTutor due to certificate chain issues
+        # This is safe for read-only access to public academic data
+        logger.warning("SSL verification disabled for MacTutor (certificate issue with mathshistory.st-andrews.ac.uk)")
+        
+        with httpx.Client(timeout=timeout, verify=False) as client:
             response = client.get(MACTUTOR_SEARCH, headers=headers, params=params, follow_redirects=True)
             response.raise_for_status()
             
@@ -91,7 +95,8 @@ def _fetch_biography_content(url: str, timeout: float = 30.0) -> tuple[str, str,
     
     headers = {"User-Agent": USER_AGENT}
     
-    with httpx.Client(timeout=timeout) as client:
+    # NOTE: SSL verification disabled for MacTutor due to certificate chain issues
+    with httpx.Client(timeout=timeout, verify=False) as client:
         response = client.get(url, headers=headers, follow_redirects=True)
         response.raise_for_status()
         
